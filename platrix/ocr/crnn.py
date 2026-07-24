@@ -19,7 +19,7 @@ from platrix.config import Settings
 from platrix.core.types import PlateDetection
 from platrix.logging_conf import get_logger
 from platrix.ocr.base import PlateOCR
-from platrix.preprocessing import enhance_plate
+from platrix.preprocessing import prep_crnn
 
 logger = get_logger(__name__)
 
@@ -73,8 +73,7 @@ class CrnnOCR(PlateOCR):
         if session is None:
             return "", 0.0
 
-        gray = enhance_plate(detection.crop)
-        img = cv2.resize(gray, (IMG_W, IMG_H), interpolation=cv2.INTER_AREA)
+        img = prep_crnn(detection.crop, (IMG_W, IMG_H))
         inp = (img.astype("float32") / 255.0).reshape(1, 1, IMG_H, IMG_W)
         logits = session.run(None, {self._input_name: inp})[0][0]  # (T, C)
         probs = _softmax(logits)

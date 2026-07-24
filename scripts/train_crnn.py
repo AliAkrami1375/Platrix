@@ -28,6 +28,8 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from platrix.preprocessing import prep_crnn  # noqa: E402
+
 IMG_H, IMG_W = 32, 128
 
 # Generator letter codes -> Persian plate characters.
@@ -55,7 +57,10 @@ def parse_label(stem: str) -> list[str] | None:
 
 
 def load_dataset(root: Path):
+    # Accept either <root>/images/*.png or several batch dirs under <root>.
     files = sorted(glob.glob(str(root / "images" / "*.png")))
+    if not files:
+        files = sorted(glob.glob(str(root / "**" / "*.png"), recursive=True))
     samples = []
     for f in files:
         seq = parse_label(Path(f).stem)
@@ -67,8 +72,43 @@ def load_dataset(root: Path):
 
 
 def load_gray(path: str) -> np.ndarray:
-    g = np.asarray(Image.open(path).convert("L"))
-    return cv2.resize(g, (IMG_W, IMG_H), interpolation=cv2.INTER_AREA)
+    """Load a full-resolution grayscale plate (augmentation happens later)."""
+    return np.asarray(Image.open(path).convert("L"))
+
+
+def augment_plate(gray: np.ndarray, rng) -> np.ndarray:
+    """Simulate real YOLO-crop conditions on a clean generated plate.
+
+    Random border padding / cropping (framing variance), brightness/contrast,
+    blur, sensor noise and JPEG compression — then the shared CRNN preprocessing.
+    """
+    h, w = gray.shape
+    # 1) Random padding or tight crop to mimic detector framing variance.
+    if rng.random() < 0.8:
+        py = rng.randint(-int(0.10 * h), int(0.16 * h) + 1)
+        px = rng.randint(-int(0.05 * w), int(0.08 * w) + 1)
+        if py >= 0 and px >= 0:
+            val = int(rng.choice([0, 128, 255]))
+            gray = cv2.copyMakeBorder(gray, py, py, px, px, cv2.BORDER_CONSTANT, value=val)
+        else:
+            y0, x0 = max(-py, 0), max(-px, 0)
+            gray = gray[y0 : h - y0, x0 : w - x0] if (h - 2 * y0 > 8 and w - 2 * x0 > 8) else gray
+    # 2) Brightness / contrast.
+    gray = cv2.convertScaleAbs(gray, alpha=rng.uniform(0.6, 1.4), beta=rng.randint(-40, 40))
+    # 3) Blur.
+    if rng.random() < 0.4:
+        k = int(rng.choice([3, 3, 5]))
+        gray = cv2.GaussianBlur(gray, (k, k), 0)
+    # 4) JPEG compression artefacts.
+    if rng.random() < 0.4:
+        q = int(rng.randint(30, 80))
+        ok, enc = cv2.imencode(".jpg", gray, [int(cv2.IMWRITE_JPEG_QUALITY), q])
+        if ok:
+            gray = cv2.imdecode(enc, cv2.IMREAD_GRAYSCALE)
+    # 5) Sensor noise.
+    if rng.random() < 0.6:
+        gray = np.clip(gray.astype(np.int16) + rng.normal(0, rng.uniform(3, 16), gray.shape).astype(np.int16), 0, 255).astype(np.uint8)
+    return gray
 
 
 def main() -> None:
@@ -92,24 +132,17 @@ def main() -> None:
     cls_to_idx = {c: i for i, c in enumerate(classes)}
     blank = len(classes)
 
-    # Preload images (7k * 32*128 = ~28 MB) for speed.
-    X = np.empty((len(samples), IMG_H, IMG_W), np.float32)
+    # Preload at a moderate resolution (leaves headroom for crop/pad augmentation).
+    PRE_H, PRE_W = 48, 192
+    X = np.empty((len(samples), PRE_H, PRE_W), np.uint8)
     Y = []
     for i, (f, seq) in enumerate(samples):
-        X[i] = load_gray(f).astype(np.float32) / 255.0
+        X[i] = cv2.resize(load_gray(f), (PRE_W, PRE_H), interpolation=cv2.INTER_AREA)
         Y.append([cls_to_idx[c] for c in seq])
 
     perm = rng.permutation(len(samples))
-    split = int(len(samples) * 0.92)
+    split = int(len(samples) * 0.94)
     tr, va = perm[:split], perm[split:]
-
-    def _aug(img):
-        # light runtime augmentation on top of the generator's baked-in variety
-        if rng.random() < 0.3:
-            img = cv2.GaussianBlur(img, (3, 3), 0)
-        if rng.random() < 0.5:
-            img = np.clip(img + rng.normal(0, rng.uniform(0.01, 0.05), img.shape), 0, 1).astype(np.float32)
-        return img
 
     class DS(Dataset):
         def __init__(self, idxs, train):
@@ -120,8 +153,9 @@ def main() -> None:
 
         def __getitem__(self, k):
             i = self.idxs[k]
-            img = _aug(X[i]) if self.train else X[i]
-            return torch.from_numpy(img[None].copy()), torch.tensor(Y[i], dtype=torch.long)
+            g = augment_plate(X[i], np.random) if self.train else X[i]
+            g = prep_crnn(g, (IMG_W, IMG_H)).astype(np.float32) / 255.0  # train == serve
+            return torch.from_numpy(g[None].copy()), torch.tensor(Y[i], dtype=torch.long)
 
     def collate(batch):
         imgs = torch.stack([b[0] for b in batch])
@@ -129,8 +163,14 @@ def main() -> None:
         lengths = torch.tensor([len(b[1]) for b in batch], dtype=torch.long)
         return imgs, targets, lengths
 
-    train_dl = DataLoader(DS(tr, True), batch_size=args.batch, shuffle=True, collate_fn=collate)
-    val_dl = DataLoader(DS(va, False), batch_size=args.batch, collate_fn=collate)
+    def _seed_worker(wid):
+        np.random.seed(1000 + wid)
+
+    train_dl = DataLoader(
+        DS(tr, True), batch_size=args.batch, shuffle=True, collate_fn=collate,
+        num_workers=4, worker_init_fn=_seed_worker, persistent_workers=True,
+    )
+    val_dl = DataLoader(DS(va, False), batch_size=args.batch, collate_fn=collate, num_workers=2)
 
     class CRNN(nn.Module):
         def __init__(self, n_cls):
@@ -168,6 +208,19 @@ def main() -> None:
             prev = i
         return "".join(out)
 
+    out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
+
+    def export():
+        model.eval()
+        torch.onnx.export(
+            model, torch.zeros(1, 1, IMG_H, IMG_W), str(out),
+            input_names=["input"], output_names=["logits"],
+            dynamic_axes={"input": {0: "batch"}, "logits": {0: "batch"}},
+            opset_version=13, dynamo=False,
+        )
+        out.with_suffix(".labels.json").write_text(json.dumps(classes, ensure_ascii=False), encoding="utf-8")
+
+    best_acc = -1.0
     for ep in range(1, args.epochs + 1):
         model.train()
         for imgs, targets, lengths in train_dl:
@@ -191,18 +244,15 @@ def main() -> None:
                     gt = "".join(classes[int(t)] for t in targets[pos : pos + n]); pos += n
                     correct += greedy(logits[b]) == gt
                     total += 1
-        print(f"epoch {ep}/{args.epochs}  loss={loss.item():.3f}  plate_acc={correct / total:.3f}")
+        acc = correct / total
+        print(f"epoch {ep}/{args.epochs}  loss={loss.item():.3f}  plate_acc={acc:.3f}", flush=True)
+        # Checkpoint the best model every epoch (robust to interruption).
+        if acc >= best_acc:
+            best_acc = acc
+            export()
 
-    out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
-    model.eval()
-    torch.onnx.export(
-        model, torch.zeros(1, 1, IMG_H, IMG_W), str(out),
-        input_names=["input"], output_names=["logits"],
-        dynamic_axes={"input": {0: "batch"}, "logits": {0: "batch"}},
-        opset_version=13, dynamo=False,
-    )
-    out.with_suffix(".labels.json").write_text(json.dumps(classes, ensure_ascii=False), encoding="utf-8")
-    print(f"Saved {out}  ({len(classes)} classes + blank)")
+    export()
+    print(f"Saved {out}  ({len(classes)} classes + blank, best_acc={best_acc:.3f})")
 
 
 if __name__ == "__main__":

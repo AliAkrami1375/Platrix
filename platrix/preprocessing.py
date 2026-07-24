@@ -58,3 +58,19 @@ def enhance_plate(plate_bgr: np.ndarray) -> np.ndarray:
     blur = cv2.GaussianBlur(con, (0, 0), 1.5)
     sharp = cv2.addWeighted(con, 1.6, blur, -0.6, 0)
     return sharp
+
+
+# --- CRNN whole-plate preprocessing (identical in training and inference) ---
+_CRNN_CLAHE = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+
+def prep_crnn(img: np.ndarray, size: tuple[int, int] = (128, 32)) -> np.ndarray:
+    """Preprocess a plate crop for the CRNN: grayscale → CLAHE → resize.
+
+    Deliberately light and fast (real-time) and applied the SAME way when
+    training and when serving, so the model never sees a distribution shift.
+    ``size`` is ``(width, height)``. Returns a ``uint8`` grayscale image.
+    """
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    gray = _CRNN_CLAHE.apply(gray)
+    return cv2.resize(gray, size, interpolation=cv2.INTER_AREA)
