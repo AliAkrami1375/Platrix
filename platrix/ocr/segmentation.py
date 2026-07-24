@@ -46,7 +46,38 @@ def _binarize(plate_bgr: np.ndarray) -> np.ndarray:
     binary = cv2.morphologyEx(
         binary, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
     )
+    binary = _remove_frame(binary)
     return binary
+
+
+def _remove_frame(binary: np.ndarray) -> np.ndarray:
+    """Drop the plate's border frame, long rim lines and specks.
+
+    Real plates have a raised rim that binarizes into long horizontal/vertical
+    lines; left in place they bridge the characters so the projection profile
+    sees no gaps. We (1) detect and subtract long thin lines with morphology,
+    then (2) drop any remaining full-span blob or tiny speck.
+    """
+    h, w = binary.shape
+    # (1) Remove long horizontal & vertical lines (character strokes are short).
+    h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(w // 3, 12), 1))
+    v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(h // 2, 12)))
+    lines = cv2.bitwise_or(
+        cv2.morphologyEx(binary, cv2.MORPH_OPEN, h_kernel),
+        cv2.morphologyEx(binary, cv2.MORPH_OPEN, v_kernel),
+    )
+    cleaned = cv2.subtract(binary, lines)
+
+    # (2) Component cleanup for any residual frame blob or noise.
+    num, lbl, stats, _ = cv2.connectedComponentsWithStats(cleaned, connectivity=8)
+    out = cleaned.copy()
+    for i in range(1, num):
+        cw = stats[i, cv2.CC_STAT_WIDTH]
+        ch = stats[i, cv2.CC_STAT_HEIGHT]
+        area = stats[i, cv2.CC_STAT_AREA]
+        if cw > 0.72 * w or ch > 0.93 * h or area < 0.0006 * h * w:
+            out[lbl == i] = 0
+    return out
 
 
 def _square_pad(glyph: np.ndarray, pad_ratio: float = 0.18) -> np.ndarray:

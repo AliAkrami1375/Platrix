@@ -44,10 +44,23 @@ IMG_SIZE = 32  # model input is 1 x IMG_SIZE x IMG_SIZE (grayscale)
 _ARABIC_TO_PERSIAN = {"ك": "ک", "ي": "ی", "ة": "ه"}
 # Characters that never appear on a plate.
 _DROP = {"،", "؛"}
+_IMG_EXTS = {".png", ".jpg", ".jpeg", ".bmp"}
+
+# Folder-per-class datasets label classes with short Latin codes; map them to
+# the Persian plate character. Digits map to themselves.
+_CODE_TO_PERSIAN = {
+    "A": "ا", "B": "ب", "P": "پ", "T": "ط", "J": "ج", "H": "ه", "D": "د",
+    "Sin": "س", "Sad": "ص", "Gh": "ق", "L": "ل", "M": "م", "N": "ن",
+    "V": "و", "Y": "ی",
+    "Taxi": "ت", "PuV": "ع", "PwD": "ژ",  # taxi / public / disabled markers
+}
 
 
 def normalize_label(raw: str) -> str | None:
-    base = unicodedata.normalize("NFKC", raw).strip()
+    raw = raw.strip()
+    if raw in _CODE_TO_PERSIAN:
+        return _CODE_TO_PERSIAN[raw]
+    base = unicodedata.normalize("NFKC", raw)
     base = _ARABIC_TO_PERSIAN.get(base, base)
     if not base or base in _DROP:
         return None
@@ -61,21 +74,43 @@ def _image_dir(root: Path) -> Path:
     raise FileNotFoundError(f"Could not find image files under {root}")
 
 
-def load_dataset(root: Path):
+def _iter_samples(root: Path):
+    """Yield (image_path, label) from either a CSV or a folder-per-class layout."""
     labels_csv = root / "labels.csv"
-    if not labels_csv.exists():
-        raise FileNotFoundError(f"labels.csv not found in {root}")
-    img_dir = _image_dir(root)
-
-    rows = list(csv.reader(labels_csv.open(encoding="utf-8-sig")))[1:]
-    samples: list[tuple[Path, str]] = []
-    for file_name, label, *_ in rows:
-        base = normalize_label(label)
+    if labels_csv.exists():
+        img_dir = _image_dir(root)
+        rows = list(csv.reader(labels_csv.open(encoding="utf-8-sig")))[1:]
+        for file_name, label, *_ in rows:
+            base = normalize_label(label)
+            path = img_dir / f"{file_name}.png"
+            if base is not None and path.exists():
+                yield path, base
+        return
+    # Folder-per-class: each sub-directory name is the label.
+    for sub in sorted(p for p in root.iterdir() if p.is_dir()):
+        base = normalize_label(sub.name)
         if base is None:
             continue
-        path = img_dir / f"{file_name}.png"
-        if path.exists():
-            samples.append((path, base))
+        for img in sub.iterdir():
+            if img.suffix.lower() in _IMG_EXTS:
+                yield img, base
+
+
+def _to_glyph(path: Path) -> np.ndarray:
+    """Load an image and canonicalize it EXACTLY as the segmenter does at serve
+    time (polarity-normalized white-on-black, tight-crop, square-pad, resize)."""
+    gray = np.asarray(Image.open(path).convert("L"))
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    if binary.mean() > 127:  # keep the (sparser) character as white foreground
+        binary = cv2.bitwise_not(binary)
+    glyph = canonical_glyph(binary, (IMG_SIZE, IMG_SIZE))
+    return glyph.astype(np.float32) / 255.0
+
+
+def load_dataset(root: Path):
+    samples = list(_iter_samples(root))
+    if not samples:
+        raise FileNotFoundError(f"No labelled images found under {root}")
 
     classes = sorted({c for _, c in samples})
     cls_to_idx = {c: i for i, c in enumerate(classes)}
@@ -84,12 +119,7 @@ def load_dataset(root: Path):
     x = np.empty((len(samples), 1, IMG_SIZE, IMG_SIZE), dtype=np.float32)
     y = np.empty(len(samples), dtype=np.int64)
     for i, (path, cls) in enumerate(samples):
-        gray = np.asarray(Image.open(path).convert("L"))
-        # Binarize to white-on-black, then canonicalize EXACTLY as the segmenter
-        # does at inference (tight-crop, square-pad, resize) so train == serve.
-        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        glyph = canonical_glyph(binary, (IMG_SIZE, IMG_SIZE))
-        x[i, 0] = glyph.astype(np.float32) / 255.0
+        x[i, 0] = _to_glyph(path)
         y[i] = cls_to_idx[cls]
     return x, y, classes
 

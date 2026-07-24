@@ -27,10 +27,15 @@ def test_onnx_backend_graceful_without_model(tmp_path):
 
 
 def test_segmentation_splits_characters():
-    # White plate with three dark bars → three character bands.
-    plate = np.full((60, 200, 3), 240, np.uint8)
-    for cx in (40, 100, 160):
-        plate[15:45, cx - 8 : cx + 8] = 20
+    import cv2
+
+    # White plate with three rendered digits → three character bands.
+    plate = np.full((80, 260, 3), 245, np.uint8)
+    for i, ch in enumerate("123"):
+        cv2.putText(
+            plate, ch, (25 + i * 75, 62),
+            cv2.FONT_HERSHEY_SIMPLEX, 1.8, (15, 15, 15), 4, cv2.LINE_AA,
+        )
     glyphs = segment_characters(plate, out_size=(32, 32))
     assert len(glyphs) == 3
     assert all(g.shape == (32, 32) for g in glyphs)
