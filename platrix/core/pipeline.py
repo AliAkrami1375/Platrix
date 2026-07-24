@@ -27,11 +27,28 @@ class RecognitionPipeline:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.detector = build_detector(settings)
-        self.ocr = build_ocr(settings)
         self._recent: dict[str, float] = {}
 
+        # Unified single-model mode (if selected and its model is present).
+        self.unified = None
+        if settings.mode.lower() == "unified":
+            from platrix.unified import UnifiedReader
+
+            reader = UnifiedReader(settings)
+            if reader.available():
+                self.unified = reader
+            else:
+                logger.warning("mode=unified but no unified model found; using two-stage")
+
+        # Two-stage components (also the fallback for unified).
+        self.detector = build_detector(settings)
+        self.ocr = build_ocr(settings)
+
     def warmup(self) -> None:
+        if self.unified is not None:
+            self.unified.warmup()
+            logger.info("Pipeline ready — unified single model")
+            return
         self.detector.warmup()
         self.ocr.warmup()
         logger.info(
@@ -42,6 +59,9 @@ class RecognitionPipeline:
 
     def process(self, frame: Frame) -> list[PlateReading]:
         """Detect and read every plate in *frame*."""
+        if self.unified is not None:
+            return self.unified.read_frame(frame)
+
         readings: list[PlateReading] = []
         for detection in self.detector.detect(frame):
             text, ocr_conf = self.ocr.read(detection)

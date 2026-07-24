@@ -78,6 +78,7 @@ class StreamManager:
             "source": self._current_spec,
             "direction": self._direction,
             "fps": round(self._fps, 1),
+            "mode": "unified" if self.pipeline.unified is not None else "two-stage",
             "detector": self.pipeline.detector.name,
             "ocr": self.pipeline.ocr.name,
         }

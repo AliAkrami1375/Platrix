@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     database_url: str = ""  # derived from data_dir if empty
     snapshots_dir: Path = BASE_DIR / "data" / "snapshots"
 
+    # --- Pipeline mode ---------------------------------------------------
+    # "two-stage" = plate detector + OCR reader (default, most accurate).
+    # "unified"   = a single model that detects & reads characters at once.
+    mode: str = "two-stage"
+    plate_ocr_weights: Path = BASE_DIR / "models" / "plate_ocr_yolo.onnx"
+
     # --- Detection -------------------------------------------------------
     detector: str = "auto"  # "auto" | "contour" | "yolo"
     yolo_weights: Path = BASE_DIR / "models" / "plate_yolo.pt"
