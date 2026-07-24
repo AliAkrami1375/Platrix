@@ -12,7 +12,7 @@ from platrix.core.types import Frame, PlateReading
 from platrix.detection import build_detector
 from platrix.logging_conf import get_logger
 from platrix.ocr import build_ocr
-from platrix.ocr.persian import to_persian_digits
+from platrix.ocr.persian import format_iranian_plate
 
 logger = get_logger(__name__)
 
@@ -45,7 +45,7 @@ class RecognitionPipeline:
         readings: list[PlateReading] = []
         for detection in self.detector.detect(frame):
             text, ocr_conf = self.ocr.read(detection)
-            text_fa = to_persian_digits(text) if text else ""
+            text_fa = format_iranian_plate(text) if text else ""
             readings.append(
                 PlateReading(
                     detection=detection,

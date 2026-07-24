@@ -20,6 +20,7 @@ from platrix.config import Settings
 from platrix.core.types import PlateDetection
 from platrix.logging_conf import get_logger
 from platrix.ocr.base import PlateOCR
+from platrix.ocr.plate_grammar import decode_plate
 from platrix.ocr.segmentation import segment_characters
 
 logger = get_logger(__name__)
@@ -83,31 +84,42 @@ class OnnxOCR(PlateOCR):
         if not glyphs:
             return "", 0.0
 
-        batch = np.stack(glyphs).astype("float32") / 255.0
-        batch = batch.reshape(len(glyphs), 1, IMG_SIZE, IMG_SIZE)
-        logits = session.run(None, {self._input_name: batch})[0]
-        probs = _softmax(logits)
+        probs = self._classify_tta(session, glyphs)
 
-        chars: list[str] = []
-        confidences: list[float] = []
-        for row in probs:
-            idx = int(np.argmax(row))
-            conf = float(row[idx])
-            if conf < self.settings.ocr_min_confidence:
-                continue
-            if 0 <= idx < len(self._labels):
-                chars.append(self._labels[idx])
-                confidences.append(conf)
-
+        # Grammar-constrained decoding (digit/letter by plate position). All
+        # glyphs are kept so the plate structure stays intact.
+        chars, confidences = decode_plate(probs, self._labels)
         if not chars:
             return "", 0.0
 
+        mean_conf = float(np.mean(confidences)) if confidences else 0.0
+        if mean_conf < self.settings.ocr_min_confidence:
+            return "", 0.0
+
         # Labels are already ASCII digits + Persian letters, so join directly:
-        # this preserves the Persian letter (e.g. "12ب34567") for display and
+        # this preserves the Persian letter (e.g. "11و11427") for display and
         # for watchlist matching (which normalizes digits but keeps letters).
         text = "".join(chars)
-        mean_conf = float(np.mean(confidences)) if confidences else 0.0
         return text, round(mean_conf, 4)
+
+    def _classify_tta(self, session, glyphs: list[np.ndarray]) -> np.ndarray:
+        """Softmax probabilities per glyph, averaged over small shifts (TTA).
+
+        Averaging a few 1‑pixel shifts smooths out the classifier's sensitivity
+        to exactly how a character was framed by the segmenter, reducing
+        look‑alike errors (e.g. ۱ vs ۵).
+        """
+        shifts = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)]
+        acc = np.zeros((len(glyphs), len(self._labels)), dtype="float32")
+        for dx, dy in shifts:
+            variants = np.empty((len(glyphs), 1, IMG_SIZE, IMG_SIZE), dtype="float32")
+            for i, g in enumerate(glyphs):
+                m = np.float32([[1, 0, dx], [0, 1, dy]])
+                shifted = cv2.warpAffine(g, m, (IMG_SIZE, IMG_SIZE), borderValue=0)
+                variants[i, 0] = shifted.astype("float32") / 255.0
+            logits = session.run(None, {self._input_name: variants})[0]
+            acc += _softmax(logits)
+        return acc / len(shifts)
 
 
 def _softmax(x: np.ndarray) -> np.ndarray:

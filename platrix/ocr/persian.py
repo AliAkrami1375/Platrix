@@ -44,6 +44,24 @@ def to_persian_digits(text: str) -> str:
     return "".join(table.get(ch, ch) for ch in text)
 
 
+def format_iranian_plate(text: str) -> str:
+    """Render a plate string in the standard grouped layout with Persian digits.
+
+    An 8-character plate ``"11و11427"`` becomes ``"۱۱ و ۱۱۴ ۲۷"`` (two digits,
+    letter, three digits, two-digit region). Other lengths are returned as-is
+    (only digit conversion applied).
+    """
+    chars = list(text)
+    if len(chars) == 8 and not chars[2].isdigit():
+        grouped = (
+            f"{chars[0]}{chars[1]} {chars[2]} "
+            f"{chars[3]}{chars[4]}{chars[5]} {chars[6]}{chars[7]}"
+        )
+    else:
+        grouped = text
+    return to_persian_digits(grouped)
+
+
 def format_plate(chars: list[str]) -> tuple[str, str]:
     """Assemble recognized characters into ``(ascii, persian)`` strings.
 
