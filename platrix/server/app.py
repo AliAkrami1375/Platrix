@@ -19,9 +19,11 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from platrix.server import auth
 
 from platrix import __version__
 from platrix.config import Settings, get_settings
@@ -63,6 +65,11 @@ class AccessRequest(BaseModel):
     email: str
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
@@ -93,6 +100,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def require_auth(request: Request, call_next):
+        if settings.auth_enabled and not auth.is_public_path(request.url.path):
+            token = request.cookies.get(auth.COOKIE_NAME)
+            if auth.verify_token(token, settings.secret_key) is None:
+                return JSONResponse({"detail": "Authentication required"}, status_code=401)
+        return await call_next(request)
+
+    # --- Authentication --------------------------------------------------
+    @app.post("/api/login")
+    def login(req: LoginRequest) -> JSONResponse:
+        if not auth.check_credentials(settings, req.username, req.password):
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+        token = auth.make_token(req.username, settings.secret_key)
+        resp = JSONResponse({"ok": True, "username": req.username})
+        resp.set_cookie(
+            auth.COOKIE_NAME, token, httponly=True, samesite="lax", max_age=7 * 24 * 3600
+        )
+        return resp
+
+    @app.post("/api/logout")
+    def logout() -> JSONResponse:
+        resp = JSONResponse({"ok": True})
+        resp.delete_cookie(auth.COOKIE_NAME)
+        return resp
+
+    @app.get("/api/me")
+    def me(request: Request) -> dict:
+        if not settings.auth_enabled:
+            return {"authenticated": True, "auth_enabled": False}
+        user = auth.verify_token(request.cookies.get(auth.COOKIE_NAME), settings.secret_key)
+        return {"authenticated": user is not None, "auth_enabled": True, "username": user}
 
     # --- Meta ------------------------------------------------------------
     @app.get("/api/health")
@@ -172,6 +212,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 date_to=date_to,
             )
         }
+
+    @app.get("/api/events/export")
+    def events_export(
+        plate: str | None = Query(None),
+        direction: str | None = Query(None),
+        list_type: str | None = Query(None),
+        date_from: str | None = Query(None),
+        date_to: str | None = Query(None),
+        limit: int = Query(100000, ge=1, le=1000000),
+    ) -> StreamingResponse:
+        rows = store.recent(
+            limit=limit, plate=plate, direction=direction,
+            list_type=list_type, date_from=date_from, date_to=date_to,
+        )
+
+        def generate():
+            import csv
+            import io
+
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            writer.writerow([
+                "time", "plate", "plate_fa", "score", "direction",
+                "matched_list", "matched_name", "source", "snapshot",
+            ])
+            yield buf.getvalue(); buf.seek(0); buf.truncate(0)
+            for e in rows:
+                writer.writerow([
+                    e["created_at"], e["plate_text"], e["plate_text_fa"],
+                    e["score"], e["direction"], e["matched_list"],
+                    e["matched_name"], e["source"], e["snapshot_path"],
+                ])
+                yield buf.getvalue(); buf.seek(0); buf.truncate(0)
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=platrix_detections.csv"},
+        )
 
     @app.get("/api/stats")
     def stats() -> dict:

@@ -163,14 +163,12 @@ def main() -> None:
         lengths = torch.tensor([len(b[1]) for b in batch], dtype=torch.long)
         return imgs, targets, lengths
 
-    def _seed_worker(wid):
-        np.random.seed(1000 + wid)
-
+    # num_workers=0: data is already in RAM and DS is a local class (can't be
+    # pickled to worker processes); augmentation is cheap enough single-threaded.
     train_dl = DataLoader(
-        DS(tr, True), batch_size=args.batch, shuffle=True, collate_fn=collate,
-        num_workers=4, worker_init_fn=_seed_worker, persistent_workers=True,
+        DS(tr, True), batch_size=args.batch, shuffle=True, collate_fn=collate, num_workers=0
     )
-    val_dl = DataLoader(DS(va, False), batch_size=args.batch, collate_fn=collate, num_workers=2)
+    val_dl = DataLoader(DS(va, False), batch_size=args.batch, collate_fn=collate, num_workers=0)
 
     class CRNN(nn.Module):
         def __init__(self, n_cls):

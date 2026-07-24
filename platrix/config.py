@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     port: int = 8080
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
 
+    # --- Authentication --------------------------------------------------
+    auth_enabled: bool = True
+    auth_user: str = "admin"
+    auth_password: str = "admin"  # CHANGE THIS via PLATRIX_AUTH_PASSWORD
+    secret_key: str = "change-me-please-set-PLATRIX_SECRET_KEY"
+
     # --- Default camera source (used by the server on startup, optional) -
     default_source: str = ""  # e.g. "0", "rtsp://...", "/path/to/video.mp4"
 

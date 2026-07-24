@@ -383,42 +383,64 @@ function connectWs() {
   ws.onclose = () => setTimeout(connectWs, 3000);
 }
 
-/* ---------- access gate ---------- */
-const EMAIL_KEY = "platrix_access_email";
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function initGate() {
+/* ---------- login gate ---------- */
+async function initGate() {
   const gate = $("gate");
-  if (localStorage.getItem(EMAIL_KEY)) { gate.classList.add("hidden"); return; }
+  let authed = false;
+  try {
+    const me = await api("/api/me");
+    authed = !me.auth_enabled || me.authenticated;
+  } catch (_) {}
+  if (authed) { gate.classList.add("hidden"); startApp(); return; }
+
   gate.classList.remove("hidden");
   $("gate-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const email = $("gate-email").value.trim();
-    if (!EMAIL_RE.test(email)) { $("gate-error").textContent = "Please enter a valid email address."; return; }
     $("gate-error").textContent = "";
-    try {
-      const r = await fetch("/api/access", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || "failed"); }
-      localStorage.setItem(EMAIL_KEY, email);
-      gate.classList.add("hidden");
-    } catch (err) {
-      $("gate-error").textContent = "Could not verify email. Please try again.";
-    }
+    const r = await fetch("/api/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: $("gate-user").value.trim(), password: $("gate-pass").value }),
+    });
+    if (r.ok) { gate.classList.add("hidden"); startApp(); }
+    else $("gate-error").textContent = "Invalid username or password.";
   });
 }
 
+const _logout = $("btn-logout");
+if (_logout) _logout.onclick = async () => {
+  await fetch("/api/logout", { method: "POST" });
+  location.reload();
+};
+
+/* export the current detection-history query as CSV */
+const _export = $("btn-hist-export");
+if (_export) _export.onclick = () => {
+  const p = new URLSearchParams();
+  const s = $("hist-search").value.trim(); if (s) p.set("plate", s);
+  const f = state.histFilter;
+  if (f === "entry" || f === "exit") p.set("direction", f);
+  if (f === "white" || f === "black") p.set("list_type", f);
+  const from = $("hist-from").value, to = $("hist-to").value;
+  if (from) p.set("date_from", from + "T00:00:00");
+  if (to) p.set("date_to", to + "T23:59:59");
+  window.location = "/api/events/export?" + p.toString();
+};
+
+let _appStarted = false;
+function startApp() {
+  if (_appStarted) return;
+  _appStarted = true;
+  refreshStatus();
+  connectWs();
+  setInterval(refreshStatus, 4000);
+}
+
 async function boot() {
-  initGate();
   try {
     const h = await api("/api/health");
     $("s-version").textContent = h.version;
     const vs = $("s-version-side"); if (vs) vs.textContent = h.version;
   } catch (_) {}
-  refreshStatus();
-  connectWs();
-  setInterval(refreshStatus, 4000);
+  await initGate();   // shows login or, if authed, calls startApp()
 }
 boot();

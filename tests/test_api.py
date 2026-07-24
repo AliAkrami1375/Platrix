@@ -12,6 +12,7 @@ def _client(tmp_path):
         snapshots_dir=tmp_path / "data" / "snapshots",
         ocr="none",
         detector="contour",
+        auth_enabled=False,
     )
     return TestClient(create_app(settings))
 

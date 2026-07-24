@@ -302,6 +302,15 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); cur
   .side-nav .nav-btn.active { background: var(--accent); color: #fff; box-shadow: 0 4px 14px var(--accent-glow); }
   .side-foot { display: flex; align-items: center; justify-content: space-between; padding: 12px 6px 4px; border-top: 1px solid var(--border-soft); }
   .side-foot .ver { font-size: 11px; color: var(--muted); }
+}
+
+.icon-btn {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 8px; padding: 7px; cursor: pointer; display: inline-flex; transition: 0.15s;
+}
+.icon-btn:hover { color: var(--black-c); border-color: var(--black-c); }
+.gate-card input + input { margin-top: 2px; }
+@media (min-width: 900px) {
 
   /* Content: hide the mobile appbar's logo cluster, show a clean header */
   .appbar { height: 64px; padding: 0 28px; }

@@ -37,7 +37,9 @@
       </nav>
       <div class="side-foot">
         <div class="status-pill"><span class="dot" id="status-dot-side"></span><span id="status-text-side">Idle</span></div>
-        <span class="ver">v<span id="s-version-side">·</span></span>
+        <button id="btn-logout" class="icon-btn" title="Sign out">
+          <svg viewBox="0 0 24 24" class="ic-s"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
       </div>
     </aside>
 
@@ -194,6 +196,9 @@
                 <button id="btn-hist-search" class="btn primary">
                   <svg viewBox="0 0 24 24" class="ic-s"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg> Search
                 </button>
+                <button id="btn-hist-export" class="btn">
+                  <svg viewBox="0 0 24 24" class="ic-s"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg> Export CSV
+                </button>
                 <button id="btn-hist-clear" class="btn">Clear</button>
               </div>
               <div id="hist-list" class="event-list" style="margin-top:14px"></div>
@@ -241,16 +246,16 @@
 
   <div id="toast" class="toast"></div>
 
-  <!-- ===== Access gate (email) ===== -->
+  <!-- ===== Access gate (login) ===== -->
   <div id="gate" class="gate hidden">
     <div class="gate-card">
       <img src="/static/logo.png" alt="Platrix" class="gate-logo" />
-      <h2>Welcome to Platrix</h2>
-      <p>Enter your email to access the recognition dashboard.</p>
+      <h2>Sign in to Platrix</h2>
+      <p>Enter your credentials to access the dashboard.</p>
       <form id="gate-form" autocomplete="on">
-        <input id="gate-email" type="email" inputmode="email" required
-               placeholder="you@example.com" />
-        <button type="submit" class="btn primary full">Continue</button>
+        <input id="gate-user" type="text" placeholder="Username" autocomplete="username" required />
+        <input id="gate-pass" type="password" placeholder="Password" autocomplete="current-password" required />
+        <button type="submit" class="btn primary full">Sign in</button>
       </form>
       <p id="gate-error" class="gate-error"></p>
       <span class="gate-foot">Self-hosted ALPR · your data stays on your server</span>
