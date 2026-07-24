@@ -58,8 +58,8 @@ plate it sees.
 The recognition flow has three swappable stages:
 
 1. **Detection** — locate the plate region.
-   - `contour` *(default)* — OpenCV Canny edges + polygon/aspect-ratio filtering + non-max suppression. **Requires no trained model**, so Platrix runs the moment it's installed.
-   - `yolo` — Ultralytics YOLO for robust detection under angle, motion and clutter (bring your own weights).
+   - `contour` *(default)* — a **weights-free** classic pipeline combining a morphological text-region search (black-hat → gradient → wide close, the standard robust ANPR technique) with the original edge/polygon finder. Candidates from both are scored by plate-likeness, de-duplicated, thresholded and ranked, so it locks onto the plate instead of returning stray corners. Runs the moment it's installed.
+   - `yolo` — Ultralytics YOLO for maximum robustness under angle, motion and clutter (bring your own weights).
 2. **Segmentation + OCR** — split the plate into characters and classify them.
    - `cnn` — homomorphic-filter character segmentation feeding a Keras CNN, mapped to the Iranian plate alphabet (digits `0–9` + Persian letters).
    - `none` — detection-only mode (still logs snapshots and timestamps).

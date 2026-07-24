@@ -37,19 +37,23 @@ function toast(msg, kind = "black") {
 }
 
 /* ---------- navigation ---------- */
-const subtitles = { live: "Live ALPR", events: "Detection log", watch: "White / Black list", stats: "Overview" };
+const titles = { live: "Live Monitor", events: "Detections", watch: "Watchlist", stats: "Statistics" };
+const subtitles = { live: "Real-time recognition", events: "Detection log & search", watch: "White / black list", stats: "System overview" };
+
+function switchView(view) {
+  document.querySelectorAll(".nav-btn").forEach((b) =>
+    b.classList.toggle("active", b.dataset.view === view)
+  );
+  document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+  $("view-" + view).classList.add("active");
+  $("appbar-title").textContent = titles[view];
+  $("appbar-sub").textContent = subtitles[view];
+  if (view === "events") loadEvents();
+  if (view === "watch") loadWatchlist();
+  if (view === "stats") loadStats();
+}
 document.querySelectorAll(".nav-btn").forEach((btn) => {
-  btn.onclick = () => {
-    document.querySelectorAll(".nav-btn").forEach((b) => b.classList.remove("active"));
-    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
-    btn.classList.add("active");
-    const view = btn.dataset.view;
-    $("view-" + view).classList.add("active");
-    $("appbar-sub").textContent = subtitles[view];
-    if (view === "events") loadEvents();
-    if (view === "watch") loadWatchlist();
-    if (view === "stats") loadStats();
-  };
+  btn.onclick = () => switchView(btn.dataset.view);
 });
 
 /* ---------- LIVE ---------- */
@@ -221,7 +225,9 @@ function watchRow(e) {
     <div class="row-side">
       <span class="badge ${e.list_type}">${e.list_type}</span>
     </div>
-    <button class="row-del" title="Remove">✕</button>`;
+    <button class="row-del" title="Remove" aria-label="Remove">
+      <svg viewBox="0 0 24 24" class="ic-s"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+    </button>`;
   row.querySelector(".row-del").onclick = async () => {
     await fetch("/api/watchlist/" + e.id, { method: "DELETE" });
     loadWatchlist();
@@ -245,19 +251,31 @@ async function loadStats() {
 }
 
 /* ---------- status + live socket ---------- */
+function setStatus(running, label) {
+  ["status-dot", "status-dot-side"].forEach((id) => {
+    const el = $(id);
+    if (el) el.className = "dot" + (running ? " live" : "");
+  });
+  ["status-text", "status-text-side"].forEach((id) => {
+    const el = $(id);
+    if (el) el.textContent = label;
+  });
+}
+
 async function refreshStatus() {
   try {
     const s = await api("/api/status");
-    $("status-dot").className = "dot" + (s.running ? " live" : "");
-    $("status-text").textContent = s.running ? "Live" : "Idle";
+    setStatus(s.running, s.running ? "Live" : "Idle");
     $("video-fps").textContent = s.running ? `${s.fps} fps` : "— fps";
     $("video-idle").style.display = s.running ? "none" : "flex";
   } catch (_) {}
 }
 
 function handleAlert(ev) {
-  if (ev.matched_list === "black") toast(`⛔ Blacklist: ${ev.plate_text} (${ev.matched_name || "?"})`, "black");
-  else if (ev.matched_list === "white") toast(`✓ ${ev.matched_name || ev.plate_text} allowed`, "white");
+  if (ev.matched_list === "black")
+    toast(`Blacklist alert — ${ev.plate_text} · ${ev.matched_name || "unknown"}`, "black");
+  else if (ev.matched_list === "white")
+    toast(`Access granted — ${ev.matched_name || ev.plate_text}`, "white");
 }
 
 function connectWs() {
@@ -280,6 +298,8 @@ async function boot() {
   try {
     const h = await api("/api/health");
     $("s-version").textContent = h.version;
+    const vs = $("s-version-side");
+    if (vs) vs.textContent = h.version;
   } catch (_) {}
   refreshStatus();
   connectWs();
