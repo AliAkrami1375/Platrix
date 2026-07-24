@@ -18,13 +18,13 @@
         <div class="side-title">Platrix<span>ALPR</span></div>
       </div>
       <nav class="side-nav">
-        <button class="nav-btn active" data-view="live">
-          <svg viewBox="0 0 24 24" class="ic"><path d="M15 8l6-3v14l-6-3"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
-          <span>Live Monitor</span>
+        <button class="nav-btn active" data-view="image">
+          <svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M4 17l5-4 4 3 3-2 4 3"/></svg>
+          <span>Image Detection</span>
         </button>
-        <button class="nav-btn" data-view="events">
-          <svg viewBox="0 0 24 24" class="ic"><line x1="8" y1="7" x2="21" y2="7"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="17" x2="21" y2="17"/><circle cx="3.5" cy="7" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="17" r="1.2"/></svg>
-          <span>Detections</span>
+        <button class="nav-btn" data-view="stream">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M15 8l6-3v14l-6-3"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
+          <span>Video Stream</span>
         </button>
         <button class="nav-btn" data-view="watch">
           <svg viewBox="0 0 24 24" class="ic"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg>
@@ -46,83 +46,96 @@
       <header class="appbar">
         <div class="brand">
           <img class="brand-logo" src="/static/logo.png" alt="Platrix" />
-          <div class="brand-text"><h1 id="appbar-title">Live Monitor</h1><span id="appbar-sub" class="brand-sub">Real-time recognition</span></div>
+          <div class="brand-text"><h1 id="appbar-title">Image Detection</h1><span id="appbar-sub" class="brand-sub">Upload &amp; recognize</span></div>
         </div>
         <div class="status-pill"><span class="dot" id="status-dot"></span><span id="status-text">Idle</span></div>
       </header>
 
       <main class="views">
-        <!-- ---------- LIVE ---------- -->
-        <section class="view active" id="view-live">
-          <div class="live-grid">
-            <div class="video-card">
-              <div class="video-wrap">
-                <img id="live" src="/api/stream/mjpeg" alt="Live feed" />
-                <div class="video-overlay" id="video-idle">
-                  <svg viewBox="0 0 24 24" class="ic-lg"><path d="M15 8l6-3v14l-6-3"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
-                  <p>No active source</p>
-                </div>
-                <div class="video-badge" id="video-fps">— fps</div>
-              </div>
-            </div>
-
-            <div class="card control-card">
-              <h3 class="card-title">Source</h3>
-              <label class="field-label">Camera / stream / file</label>
-              <input id="source-input" type="text" inputmode="url"
-                     placeholder="0 · rtsp://user:pass@host/stream · /path/video.mp4" />
-
-              <label class="field-label">Lane direction</label>
-              <div class="seg" id="dir-seg">
-                <button data-dir="entry" class="seg-btn">Entry</button>
-                <button data-dir="unknown" class="seg-btn active">None</button>
-                <button data-dir="exit" class="seg-btn">Exit</button>
-              </div>
-
-              <div class="btn-row">
-                <button id="btn-start" class="btn primary">
-                  <svg viewBox="0 0 24 24" class="ic-s"><polygon points="6 4 20 12 6 20 6 4"/></svg> Start
-                </button>
-                <button id="btn-stop" class="btn">
-                  <svg viewBox="0 0 24 24" class="ic-s"><rect x="6" y="6" width="12" height="12" rx="1"/></svg> Stop
-                </button>
-              </div>
-
-              <hr class="divider" />
-              <h3 class="card-title">Recognize an image</h3>
+        <!-- ================= IMAGE DETECTION ================= -->
+        <section class="view active" id="view-image">
+          <div class="split">
+            <div class="card">
+              <h3 class="card-title">Upload an image</h3>
               <label class="dropzone" id="dropzone">
                 <input id="file-input" type="file" accept="image/*" hidden />
                 <svg viewBox="0 0 24 24" class="ic-lg"><path d="M12 16V4"/><path d="M8 8l4-4 4 4"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
                 <span>Drop an image or click to browse</span>
               </label>
+              <div id="image-preview" class="result-canvas"></div>
               <p id="upload-result" class="hint"></p>
-              <div id="upload-preview"></div>
+            </div>
+
+            <div class="card">
+              <h3 class="card-title">Detected plates</h3>
+              <p class="hint" id="detect-hint">Results appear here. You can label each plate and add it to a list.</p>
+              <div id="detect-list" class="detect-list"></div>
             </div>
           </div>
         </section>
 
-        <!-- ---------- EVENTS ---------- -->
-        <section class="view" id="view-events">
-          <div class="toolbar">
-            <div class="search-bar">
-              <svg viewBox="0 0 24 24" class="ic-s"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
-              <input id="search-input" type="search" placeholder="Search plate number…" />
+        <!-- ================= VIDEO STREAM ================= -->
+        <section class="view" id="view-stream">
+          <div class="split">
+            <div>
+              <div class="video-card">
+                <div class="video-wrap">
+                  <img id="live" src="/api/stream/mjpeg" alt="Live feed" />
+                  <div class="video-overlay" id="video-idle">
+                    <svg viewBox="0 0 24 24" class="ic-lg"><path d="M15 8l6-3v14l-6-3"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
+                    <p>Select a camera to view its live stream</p>
+                  </div>
+                  <div class="video-badge" id="video-fps">— fps</div>
+                </div>
+                <div class="video-actions">
+                  <span id="stream-current" class="hint">No active stream</span>
+                  <button id="btn-stop" class="btn sm">
+                    <svg viewBox="0 0 24 24" class="ic-s"><rect x="6" y="6" width="12" height="12" rx="1"/></svg> Stop
+                  </button>
+                </div>
+              </div>
+
+              <div class="card live-log-card">
+                <h3 class="card-title">Live detections</h3>
+                <div id="stream-log" class="event-list compact"></div>
+                <p id="stream-log-empty" class="empty">Waiting for detections…</p>
+              </div>
             </div>
-            <div class="chips" id="event-filters">
-              <button class="chip active" data-filter="all">All</button>
-              <button class="chip" data-filter="entry">Entry</button>
-              <button class="chip" data-filter="exit">Exit</button>
-              <button class="chip chip-white" data-filter="white">Whitelist</button>
-              <button class="chip chip-black" data-filter="black">Blacklist</button>
+
+            <div class="card">
+              <h3 class="card-title">Add a camera</h3>
+              <label class="field-label">Name</label>
+              <input id="cam-name" type="text" placeholder="e.g. Front gate" />
+              <label class="field-label">Stream URL / source</label>
+              <input id="cam-url" type="text" inputmode="url" placeholder="rtsp://user:pass@host:554/stream · http://…/mjpeg · 0" />
+              <label class="field-label">Lane direction</label>
+              <div class="seg" id="cam-dir-seg">
+                <button data-dir="entry" class="seg-btn">Entry</button>
+                <button data-dir="unknown" class="seg-btn active">None</button>
+                <button data-dir="exit" class="seg-btn">Exit</button>
+              </div>
+              <div class="btn-row">
+                <button id="btn-test-cam" class="btn">
+                  <svg viewBox="0 0 24 24" class="ic-s"><path d="M20 6L9 17l-5-5"/></svg> Test
+                </button>
+                <button id="btn-save-cam" class="btn primary" disabled>
+                  <svg viewBox="0 0 24 24" class="ic-s"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save
+                </button>
+              </div>
+              <p id="cam-test-result" class="hint"></p>
+              <div id="cam-test-preview" class="result-canvas"></div>
+
+              <hr class="divider" />
+              <h3 class="card-title">Saved cameras</h3>
+              <div id="camera-list" class="cam-list"></div>
+              <p id="camera-empty" class="empty">No cameras saved yet.</p>
             </div>
           </div>
-          <div id="events-list" class="event-list"></div>
-          <p id="events-empty" class="empty">No detections yet.</p>
         </section>
 
-        <!-- ---------- WATCHLIST ---------- -->
+        <!-- ================= WATCHLIST ================= -->
         <section class="view" id="view-watch">
-          <div class="watch-grid">
+          <div class="split">
             <div class="card">
               <h3 class="card-title">Register a plate</h3>
               <label class="field-label">Plate number</label>
@@ -138,9 +151,13 @@
                 <svg viewBox="0 0 24 24" class="ic-s"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add to list
               </button>
               <p id="watch-result" class="hint"></p>
-            </div>
 
-            <div class="watch-list-col">
+              <hr class="divider" />
+              <h3 class="card-title">Registered plates</h3>
+              <div class="search-bar sm">
+                <svg viewBox="0 0 24 24" class="ic-s"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+                <input id="watch-search" type="search" placeholder="Filter by plate or name…" />
+              </div>
               <div class="chips" id="watch-filters">
                 <button class="chip active" data-wf="all">All</button>
                 <button class="chip chip-white" data-wf="white">Whitelist</button>
@@ -149,10 +166,43 @@
               <div id="watch-list" class="event-list"></div>
               <p id="watch-empty" class="empty">No plates registered.</p>
             </div>
+
+            <div class="card">
+              <h3 class="card-title">Detection history</h3>
+              <div class="search-bar">
+                <svg viewBox="0 0 24 24" class="ic-s"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+                <input id="hist-search" type="search" placeholder="Search plate number…" />
+              </div>
+              <div class="filter-grid">
+                <div>
+                  <label class="field-label">From</label>
+                  <input id="hist-from" type="date" />
+                </div>
+                <div>
+                  <label class="field-label">To</label>
+                  <input id="hist-to" type="date" />
+                </div>
+              </div>
+              <div class="chips" id="hist-filters">
+                <button class="chip active" data-filter="all">All</button>
+                <button class="chip" data-filter="entry">Entry</button>
+                <button class="chip" data-filter="exit">Exit</button>
+                <button class="chip chip-white" data-filter="white">Whitelist</button>
+                <button class="chip chip-black" data-filter="black">Blacklist</button>
+              </div>
+              <div class="btn-row">
+                <button id="btn-hist-search" class="btn primary">
+                  <svg viewBox="0 0 24 24" class="ic-s"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg> Search
+                </button>
+                <button id="btn-hist-clear" class="btn">Clear</button>
+              </div>
+              <div id="hist-list" class="event-list" style="margin-top:14px"></div>
+              <p id="hist-empty" class="empty">No matching detections.</p>
+            </div>
           </div>
         </section>
 
-        <!-- ---------- STATS ---------- -->
+        <!-- ================= STATS ================= -->
         <section class="view" id="view-stats">
           <div class="stat-grid">
             <div class="stat-tile"><span class="stat-num" id="s-total">0</span><span class="stat-lbl">Detections</span></div>
@@ -174,11 +224,11 @@
 
     <!-- ===== Bottom navigation (mobile) ===== -->
     <nav class="bottom-nav">
-      <button class="nav-btn active" data-view="live">
-        <svg viewBox="0 0 24 24" class="ic"><path d="M15 8l6-3v14l-6-3"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg><span>Live</span>
+      <button class="nav-btn active" data-view="image">
+        <svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M4 17l5-4 4 3 3-2 4 3"/></svg><span>Image</span>
       </button>
-      <button class="nav-btn" data-view="events">
-        <svg viewBox="0 0 24 24" class="ic"><line x1="8" y1="7" x2="21" y2="7"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="17" x2="21" y2="17"/><circle cx="3.5" cy="7" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="17" r="1.2"/></svg><span>Events</span>
+      <button class="nav-btn" data-view="stream">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M15 8l6-3v14l-6-3"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg><span>Stream</span>
       </button>
       <button class="nav-btn" data-view="watch">
         <svg viewBox="0 0 24 24" class="ic"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/></svg><span>Watchlist</span>

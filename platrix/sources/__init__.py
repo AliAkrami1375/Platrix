@@ -32,4 +32,35 @@ def open_source(spec: str, *, loop: bool = False) -> FrameSource:
     return VideoSource(str(path), loop=loop)
 
 
-__all__ = ["FrameSource", "ImageSource", "VideoSource", "open_source"]
+def test_source(spec: str, timeout: float = 8.0):
+    """Try to open *spec* and grab a single frame.
+
+    Returns ``(ok, message, frame_bgr_or_None)``. Never raises — a failure is
+    reported through the return value so the API can surface a friendly error.
+    """
+    import time
+
+    import cv2
+
+    spec = (spec or "").strip()
+    if not spec:
+        return False, "Empty source", None
+
+    target: "int | str" = int(spec) if spec.isdigit() else spec
+    cap = cv2.VideoCapture(target)
+    try:
+        deadline = time.monotonic() + timeout
+        if not cap.isOpened():
+            return False, "Could not open the source (bad URL or unreachable)", None
+        frame = None
+        while time.monotonic() < deadline:
+            ok, frame = cap.read()
+            if ok and frame is not None:
+                h, w = frame.shape[:2]
+                return True, f"Connected · {w}x{h}", frame
+        return False, "Opened but no frame received (timeout)", None
+    finally:
+        cap.release()
+
+
+__all__ = ["FrameSource", "ImageSource", "VideoSource", "open_source", "test_source"]

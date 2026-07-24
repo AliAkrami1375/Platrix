@@ -135,11 +135,15 @@ PLATRIX_DEFAULT_SOURCE="rtsp://user:pass@192.168.1.50:554/stream" platrix serve
 | `POST` | `/api/stream/stop` | Stop the active source |
 | `GET`  | `/api/stream/mjpeg` | Annotated MJPEG video stream |
 | `POST` | `/api/recognize` | Multipart image upload → detected plates + annotated preview |
-| `GET`  | `/api/events?limit=&plate=&direction=&list_type=` | Search the detection log |
+| `GET`  | `/api/events?limit=&plate=&direction=&list_type=&date_from=&date_to=` | Search the detection log (with date range) |
 | `GET`  | `/api/stats` | Aggregate statistics |
 | `GET`  | `/api/watchlist?list_type=` | List watchlisted plates |
 | `POST` | `/api/watchlist` | Add a named plate — `{ "plate", "name", "list_type": "white"\|"black" }` |
 | `DELETE` | `/api/watchlist/{id}` | Remove a watchlist entry |
+| `GET`  | `/api/cameras` | List saved cameras |
+| `POST` | `/api/cameras` | Save a camera — `{ "name", "url", "direction" }` |
+| `POST` | `/api/cameras/test` | Test a stream URL — `{ "url" }` → `{ ok, message, preview }` |
+| `DELETE` | `/api/cameras/{id}` | Remove a saved camera |
 | `WS`   | `/ws/events` | Live detection events as JSON |
 
 ```bash

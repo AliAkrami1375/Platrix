@@ -93,3 +93,27 @@ class WatchlistEntry(Base):
             "active": self.active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class Camera(Base):
+    """A saved video source (RTSP/HTTP stream, file, or webcam index)."""
+
+    __tablename__ = "cameras"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(80), default="")
+    url: Mapped[str] = mapped_column(String(512))
+    direction: Mapped[str] = mapped_column(String(16), default="unknown")  # entry|exit|unknown
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "url": self.url,
+            "direction": self.direction,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }

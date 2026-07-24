@@ -13,11 +13,23 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from platrix.config import Settings
 from platrix.core.types import PlateReading
+from datetime import datetime as _dt
+
 from platrix.logging_conf import get_logger
 from platrix.ocr.persian import to_english_digits
-from platrix.storage.models import Base, DetectionEvent, WatchlistEntry
+from platrix.storage.models import Base, Camera, DetectionEvent, WatchlistEntry
 
 logger = get_logger(__name__)
+
+
+def _parse_date(value: str | None) -> _dt | None:
+    """Parse an ISO date/datetime string, returning None on failure."""
+    if not value:
+        return None
+    try:
+        return _dt.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def normalize_plate(text: str) -> str:
@@ -174,6 +186,8 @@ class EventStore:
         plate: str | None = None,
         direction: str | None = None,
         list_type: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
     ) -> list[dict]:
         stmt = select(DetectionEvent)
         if plate:
@@ -183,9 +197,45 @@ class EventStore:
             stmt = stmt.where(DetectionEvent.direction == direction)
         if list_type in ("white", "black"):
             stmt = stmt.where(DetectionEvent.matched_list == list_type)
+        dfrom = _parse_date(date_from)
+        dto = _parse_date(date_to)
+        if dfrom:
+            stmt = stmt.where(DetectionEvent.created_at >= dfrom)
+        if dto:
+            stmt = stmt.where(DetectionEvent.created_at <= dto)
         stmt = stmt.order_by(desc(DetectionEvent.created_at)).limit(limit)
         with self._Session() as session:
             return [row.to_dict() for row in session.scalars(stmt)]
+
+    # -- cameras ----------------------------------------------------------
+    def add_camera(self, name: str, url: str, direction: str = "unknown") -> dict:
+        url = (url or "").strip()
+        if not url:
+            raise ValueError("Stream URL is empty")
+        if direction not in ("entry", "exit", "unknown"):
+            direction = "unknown"
+        cam = Camera(name=name.strip() or url, url=url, direction=direction)
+        with self._Session() as session:
+            session.add(cam)
+            session.commit()
+            session.refresh(cam)
+            data = cam.to_dict()
+        logger.info("CAMERA saved %r -> %s (%s)", data["name"], url, direction)
+        return data
+
+    def list_cameras(self) -> list[dict]:
+        stmt = select(Camera).order_by(desc(Camera.created_at))
+        with self._Session() as session:
+            return [c.to_dict() for c in session.scalars(stmt)]
+
+    def delete_camera(self, camera_id: int) -> bool:
+        with self._Session() as session:
+            cam = session.get(Camera, camera_id)
+            if cam is None:
+                return False
+            session.delete(cam)
+            session.commit()
+        return True
 
     def stats(self) -> dict:
         with self._Session() as session:

@@ -40,6 +40,16 @@ class WatchRequest(BaseModel):
     note: str = ""
 
 
+class CameraRequest(BaseModel):
+    name: str = ""
+    url: str
+    direction: str = "unknown"
+
+
+class TestRequest(BaseModel):
+    url: str
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
@@ -136,10 +146,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         plate: str | None = Query(None),
         direction: str | None = Query(None),
         list_type: str | None = Query(None),
+        date_from: str | None = Query(None),
+        date_to: str | None = Query(None),
     ) -> dict:
         return {
             "events": store.recent(
-                limit=limit, plate=plate, direction=direction, list_type=list_type
+                limit=limit,
+                plate=plate,
+                direction=direction,
+                list_type=list_type,
+                date_from=date_from,
+                date_to=date_to,
             )
         }
 
@@ -169,6 +186,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not store.delete_watch(entry_id):
             raise HTTPException(status_code=404, detail="Entry not found")
         return {"deleted": entry_id}
+
+    # --- Cameras (saved video streams) ----------------------------------
+    @app.get("/api/cameras")
+    def cameras_list() -> dict:
+        return {"cameras": store.list_cameras()}
+
+    @app.post("/api/cameras")
+    def cameras_add(req: CameraRequest) -> dict:
+        try:
+            return store.add_camera(name=req.name, url=req.url, direction=req.direction)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.delete("/api/cameras/{camera_id}")
+    def cameras_delete(camera_id: int) -> dict:
+        if not store.delete_camera(camera_id):
+            raise HTTPException(status_code=404, detail="Camera not found")
+        return {"deleted": camera_id}
+
+    @app.post("/api/cameras/test")
+    def cameras_test(req: TestRequest) -> dict:
+        from platrix.sources import test_source
+
+        ok, message, frame = test_source(req.url)
+        preview = None
+        if ok and frame is not None:
+            import base64
+
+            h, w = frame.shape[:2]
+            scale = 480 / max(w, 1)
+            if scale < 1:
+                frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+            enc_ok, buf = cv2.imencode(".jpg", frame)
+            if enc_ok:
+                preview = "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("ascii")
+        return {"ok": ok, "message": message, "preview": preview}
 
     # --- Live event WebSocket -------------------------------------------
     @app.websocket("/ws/events")
