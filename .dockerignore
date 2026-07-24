@@ -1,0 +1,13 @@
+.git
+.github
+__pycache__
+*.pyc
+.venv
+venv
+data
+models/*.h5
+models/*.pt
+tests
+*.md
+!README.md
+.env

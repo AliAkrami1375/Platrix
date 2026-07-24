@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Platrix runtime data
+data/
+!data/.gitkeep
+*.db
+*.sqlite3
+
+# Model weights (large binaries — distribute separately)
+models/*.h5
+models/*.pt
+models/*.onnx
+models/*.labels.json
+!models/.gitkeep
+
+# Env / secrets
+.env
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store

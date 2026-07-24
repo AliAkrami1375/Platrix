@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Platrix · Live ALPR</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">▣</span>
+      <div>
+        <h1>Platrix</h1>
+        <p class="tagline">Real-time Iranian license plate recognition</p>
+      </div>
+    </div>
+    <div class="status" id="status-pill">
+      <span class="dot" id="status-dot"></span>
+      <span id="status-text">Idle</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel video-panel">
+      <div class="panel-head">
+        <h2>Live feed</h2>
+        <span class="meta" id="fps-meta">— fps</span>
+      </div>
+      <div class="video-wrap">
+        <img id="live" src="/api/stream/mjpeg" alt="Live feed" />
+        <div class="video-overlay" id="video-idle">No active source</div>
+      </div>
+
+      <div class="controls">
+        <input id="source-input" type="text"
+               placeholder="0  ·  rtsp://user:pass@host/stream  ·  /path/video.mp4" />
+        <button id="btn-start" class="primary">Start</button>
+        <button id="btn-stop">Stop</button>
+      </div>
+
+      <div class="controls upload-row">
+        <label class="file-btn">
+          <input id="file-input" type="file" accept="image/*" hidden />
+          Recognize an image…
+        </label>
+        <span id="upload-result" class="meta"></span>
+      </div>
+      <div id="upload-preview"></div>
+    </section>
+
+    <section class="panel log-panel">
+      <div class="panel-head">
+        <h2>Detections</h2>
+        <div class="stats" id="stats">
+          <span><b id="stat-total">0</b> events</span>
+          <span><b id="stat-distinct">0</b> plates</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Plate</th><th>Score</th><th>Source</th><th>Snap</th></tr>
+          </thead>
+          <tbody id="events-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>Platrix v<span id="version">·</span> — self-hosted ALPR engine</footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

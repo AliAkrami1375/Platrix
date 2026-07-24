@@ -1,0 +1,19 @@
+services:
+  platrix:
+    build: .
+    image: platrix:latest
+    container_name: platrix
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PLATRIX_DETECTOR: contour        # or "yolo" (needs models/plate_yolo.pt)
+      PLATRIX_OCR: cnn                  # or "none"
+      PLATRIX_LOG_LEVEL: INFO
+      # PLATRIX_DEFAULT_SOURCE: "rtsp://user:pass@camera/stream"
+    volumes:
+      - ./data:/app/data               # SQLite DB + snapshots persist here
+      - ./models:/app/models           # trained weights
+    # For USB/webcam passthrough on Linux, uncomment:
+    # devices:
+    #   - "/dev/video0:/dev/video0"

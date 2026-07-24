@@ -1,0 +1,4 @@
+# Optional ML extras: CNN OCR + YOLO detection.
+# Install with:  pip install -r requirements.txt -r requirements-ml.txt
+tensorflow>=2.15
+ultralytics>=8.1

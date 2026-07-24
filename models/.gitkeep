@@ -1,0 +1,4 @@
+# Place trained weights here:
+#   ocr_cnn.h5 + ocr_cnn.labels.json   (CNN OCR backend)
+#   plate_yolo.pt                      (YOLO detector backend)
+# These files are git-ignored; distribute them via releases or object storage.

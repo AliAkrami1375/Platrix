@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "platrix"
+version = "1.0.0"
+description = "Real-time, self-hosted Iranian license plate recognition (ALPR) engine"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["alpr", "anpr", "license-plate", "iran", "opencv", "computer-vision", "ocr"]
+dependencies = [
+    "numpy>=1.24",
+    "opencv-python-headless>=4.8",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "python-multipart>=0.0.9",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "SQLAlchemy>=2.0",
+]
+
+[project.optional-dependencies]
+ml = ["tensorflow>=2.15", "ultralytics>=8.1"]
+dev = ["pytest>=8.0", "ruff>=0.4"]
+
+[project.scripts]
+platrix = "platrix.cli:main"
+
+[project.urls]
+Repository = "https://github.com/AliAkrami1375/Platrix"
+
+[tool.setuptools.packages.find]
+include = ["platrix*"]
+
+[tool.setuptools.package-data]
+platrix = ["web/templates/*.html", "web/static/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
