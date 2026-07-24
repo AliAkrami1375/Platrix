@@ -10,6 +10,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED)](docker-compose.yml)
+[![Model on Hugging Face](https://img.shields.io/badge/🤗%20Model-Dibachain%2Focr--persian-yellow)](https://huggingface.co/Dibachain/ocr-persian)
 
 [English](README.md) · **فارسی**
 
@@ -212,12 +213,27 @@ python scripts/train_ocr.py --data /path/to/character-dataset --epochs 10
 
 <div dir="rtl">
 
-> **وزن‌های مدل در این ریپو قرار داده نشده‌اند.** می‌توانید خودتان با دستور بالا
-> آموزش دهید، **یا مدل آمادهٔ از پیش آموزش‌دیده را با ایمیل درخواست کنید**:
-> **[dibachain@gmail.com](mailto:dibachain@gmail.com)** — یک پیام بفرستید تا لینک
-> دانلود مدل برایتان ارسال شود.
->
-> تا زمانی که مدلی وجود نداشته باشد، پلاتریکس در حالت «فقط‌تشخیص» کار می‌کند و
+### دریافت مدل آماده
+
+مدل OCR فارسی روی Hugging Face منتشر شده است:
+
+**➜ https://huggingface.co/Dibachain/ocr-persian**
+
+</div>
+
+```bash
+pip install huggingface_hub
+huggingface-cli download Dibachain/ocr-persian ocr_cnn.onnx ocr_cnn.labels.json --local-dir models/
+PLATRIX_OCR=onnx platrix serve
+```
+
+<div dir="rtl">
+
+می‌توانید خودتان هم با دستور بالا آموزش دهید، یا مدل را با ایمیل درخواست کنید:
+**[dibachain@gmail.com](mailto:dibachain@gmail.com)**.
+
+> **وزن‌های مدل در این ریپو قرار داده نشده‌اند** (روی Hugging Face هستند). تا
+> زمانی که مدلی وجود نداشته باشد، پلاتریکس در حالت «فقط‌تشخیص» کار می‌کند و
 > همچنان پلاک‌ها و Snapshotها را ثبت می‌کند؛ در تب **Image Detection** هم می‌توانید
 > پلاک را دستی لیبل بزنید.
 

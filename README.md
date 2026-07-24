@@ -10,6 +10,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED)](docker-compose.yml)
+[![Model on Hugging Face](https://img.shields.io/badge/🤗%20Model-Dibachain%2Focr--persian-yellow)](https://huggingface.co/Dibachain/ocr-persian)
 
 **English** · [فارسی](README.fa.md)
 
@@ -200,11 +201,22 @@ so the model tolerates how the segmenter frames characters, and exports to ONNX.
 The label file records the output-neuron order so Platrix maps predictions back
 to the correct characters automatically.
 
-> **Model weights are not shipped in this repo.** You can train your own with
-> the command above, **or request the ready-to-use pre-trained model** by email:
-> **[dibachain@gmail.com](mailto:dibachain@gmail.com)** — send a message and
-> you'll receive the model download.
->
+### Get the pre-trained model
+
+The ready-to-use Persian OCR model is published on Hugging Face:
+
+**➜ https://huggingface.co/Dibachain/ocr-persian**
+
+```bash
+pip install huggingface_hub
+huggingface-cli download Dibachain/ocr-persian ocr_cnn.onnx ocr_cnn.labels.json --local-dir models/
+PLATRIX_OCR=onnx platrix serve
+```
+
+You can also **train your own** with the command above, or request the model by
+email: **[dibachain@gmail.com](mailto:dibachain@gmail.com)**.
+
+> **Model weights are not committed to this repo** (they live on Hugging Face).
 > Until a model is in place, Platrix runs in detection-only mode: it still
 > localizes plates and logs snapshots + timestamps, and you can label plates by
 > hand in the **Image Detection** tab.
