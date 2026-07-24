@@ -24,8 +24,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-train = ["torch>=2.2"]           # train the Persian OCR CNN -> ONNX
-yolo = ["ultralytics>=8.1"]      # optional YOLO detector backend
+train = ["torch>=2.2"]                            # train the OCR CNN -> ONNX
+yolo = ["torch>=2.2", "torchvision>=0.17", "ultralytics>=8.1"]  # YOLO detector
 dev = ["pytest>=8.0", "ruff>=0.4"]
 
 [project.scripts]

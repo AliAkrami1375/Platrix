@@ -21,6 +21,11 @@ models/*.pt
 models/*.onnx
 models/*.labels.json
 !models/.gitkeep
+# YOLO base weights auto-downloaded by ultralytics during training
+yolov8*.pt
+yolo11*.pt
+*.onnx
+*.pt
 
 # Env / secrets
 .env

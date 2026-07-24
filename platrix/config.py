@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     snapshots_dir: Path = BASE_DIR / "data" / "snapshots"
 
     # --- Detection -------------------------------------------------------
-    detector: str = "contour"  # "contour" | "yolo"
+    detector: str = "auto"  # "auto" | "contour" | "yolo"
     yolo_weights: Path = BASE_DIR / "models" / "plate_yolo.pt"
     detection_confidence: float = 0.35
     min_plate_area: int = 1000

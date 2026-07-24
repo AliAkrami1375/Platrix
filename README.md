@@ -59,8 +59,9 @@ plate it sees.
 The recognition flow has three swappable stages:
 
 1. **Detection** — locate the plate region.
-   - `contour` *(default)* — a **weights-free** classic pipeline combining a morphological text-region search (black-hat → gradient → wide close, the standard robust ANPR technique) with the original edge/polygon finder. Candidates from both are scored by plate-likeness, de-duplicated, thresholded and ranked, so it locks onto the plate instead of returning stray corners. Runs the moment it's installed.
-   - `yolo` — Ultralytics YOLO for maximum robustness under angle, motion and clutter (bring your own weights).
+   - `yolo` — a YOLOv8 plate detector run through **ONNX Runtime** (no PyTorch needed at serve time). Robust on real photos under angle, motion and clutter; this is what makes end-to-end reading work on real images.
+   - `contour` — a **weights-free** classic fallback combining a morphological text-region search (black-hat → gradient → wide close) with an edge/polygon finder, scored and NMS-ranked. Runs with no model at all.
+   - `auto` *(default)* — uses `yolo` when a detector model is present, otherwise `contour`.
 2. **Segmentation + OCR** — split the plate into characters and classify them.
    - `onnx` *(default)* — homomorphic-filter character segmentation feeding a CNN run through **ONNX Runtime** (portable, no TensorFlow needed), mapped to the Iranian plate alphabet (digits `0–9` + Persian letters).
    - `cnn` — the same idea via a Keras/TensorFlow model, for existing `.h5` weights.
@@ -209,8 +210,10 @@ The ready-to-use Persian OCR model is published on Hugging Face:
 
 ```bash
 pip install huggingface_hub
-huggingface-cli download Dibachain/ocr-persian ocr_cnn.onnx ocr_cnn.labels.json --local-dir models/
-PLATRIX_OCR=onnx platrix serve
+# OCR model + the YOLO plate detector (end-to-end reading on real photos)
+huggingface-cli download Dibachain/ocr-persian \
+    ocr_cnn.onnx ocr_cnn.labels.json plate_yolo.onnx --local-dir models/
+platrix serve   # auto-detects the models and uses YOLO + ONNX OCR
 ```
 
 You can also **train your own** with the command above, or request the model by
@@ -223,6 +226,17 @@ email: **[dibachain@gmail.com](mailto:dibachain@gmail.com)**.
 
 A legacy Keras/TensorFlow trainer is available at `scripts/train_ocr_keras.py`
 for the `cnn` backend.
+
+### Training the plate detector
+
+The YOLO plate detector is trained from a Pascal-VOC plate-detection dataset
+(images + bounding boxes) and exported to ONNX:
+
+```bash
+pip install torch torchvision ultralytics --index-url https://download.pytorch.org/whl/cpu
+python scripts/train_detector.py --voc /path/to/voc-dataset --epochs 30
+# → models/plate_yolo.onnx  (+ .pt)
+```
 
 ---
 

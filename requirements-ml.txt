@@ -3,9 +3,11 @@
 #
 # Install with:  pip install -r requirements.txt -r requirements-ml.txt
 #
-# PyTorch is used to train the Persian OCR CNN (scripts/train_ocr.py) and is
-# exported to ONNX. Install the CPU build to avoid the large CUDA packages:
-#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# PyTorch trains the Persian OCR CNN (scripts/train_ocr.py) and the YOLO plate
+# detector (scripts/train_detector.py), then both are exported to ONNX. Install
+# the CPU builds together so torch and torchvision stay ABI-compatible:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 torch>=2.2
-ultralytics>=8.1        # optional YOLO detector backend
+torchvision>=0.17       # required by ultralytics (NMS)
+ultralytics>=8.1        # YOLO plate-detector backend (train + inference)
 # tensorflow>=2.15      # only for the legacy Keras OCR trainer (train_ocr_keras.py)
