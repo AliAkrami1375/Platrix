@@ -41,6 +41,7 @@ class StreamManager:
         self._lock = threading.Lock()
         self._latest_jpeg: Optional[bytes] = None
         self._current_spec: Optional[str] = None
+        self._direction: str = "unknown"
         self._fps: float = 0.0
         self._subscribers: list[EventCallback] = []
         self._recent_events: deque[dict] = deque(maxlen=50)
@@ -73,15 +74,17 @@ class StreamManager:
         return {
             "running": self.is_running,
             "source": self._current_spec,
+            "direction": self._direction,
             "fps": round(self._fps, 1),
             "detector": self.pipeline.detector.name,
             "ocr": self.pipeline.ocr.name,
         }
 
-    def start(self, spec: str, loop: bool = False) -> None:
+    def start(self, spec: str, loop: bool = False, direction: str = "unknown") -> None:
         """Start (or restart) the worker on a new source specification."""
         self.stop()
         self._stop.clear()
+        self._direction = direction if direction in ("entry", "exit") else "unknown"
         self._source = open_source(spec, loop=loop)
         self._current_spec = spec
         self._thread = threading.Thread(
@@ -125,7 +128,7 @@ class StreamManager:
                 for reading in readings:
                     if self.pipeline.is_duplicate(reading):
                         continue
-                    event = self.store.record(reading)
+                    event = self.store.record(reading, direction=self._direction)
                     self._broadcast(event.to_dict())
 
                 self._encode(annotate(frame.image, readings))

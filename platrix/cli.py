@@ -57,7 +57,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             for reading in readings:
                 if pipeline.is_duplicate(reading):
                     continue
-                store.record(reading)
+                store.record(reading, direction=args.direction)
                 count += 1
                 print(
                     f"[{reading.timestamp.isoformat()}] "
@@ -103,6 +103,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("source", help="Webcam index, stream URL, video or image path")
     p_run.add_argument("--show", action="store_true", help="Show an annotated window")
     p_run.add_argument("--loop", action="store_true", help="Loop video files")
+    p_run.add_argument(
+        "--direction",
+        choices=["entry", "exit", "unknown"],
+        default="unknown",
+        help="Tag detections as entry/exit (for gate/lane setups)",
+    )
     p_run.set_defaults(func=_cmd_run)
 
     p_events = sub.add_parser("events", help="Print recent detections")

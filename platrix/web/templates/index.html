@@ -2,73 +2,157 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Platrix · Live ALPR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0b0f17" />
+  <title>Platrix</title>
+  <link rel="icon" type="image/png" href="/static/logo.png" />
+  <link rel="apple-touch-icon" href="/static/logo.png" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">▣</span>
-      <div>
-        <h1>Platrix</h1>
-        <p class="tagline">Real-time Iranian license plate recognition</p>
-      </div>
-    </div>
-    <div class="status" id="status-pill">
-      <span class="dot" id="status-dot"></span>
-      <span id="status-text">Idle</span>
-    </div>
-  </header>
-
-  <main>
-    <section class="panel video-panel">
-      <div class="panel-head">
-        <h2>Live feed</h2>
-        <span class="meta" id="fps-meta">— fps</span>
-      </div>
-      <div class="video-wrap">
-        <img id="live" src="/api/stream/mjpeg" alt="Live feed" />
-        <div class="video-overlay" id="video-idle">No active source</div>
-      </div>
-
-      <div class="controls">
-        <input id="source-input" type="text"
-               placeholder="0  ·  rtsp://user:pass@host/stream  ·  /path/video.mp4" />
-        <button id="btn-start" class="primary">Start</button>
-        <button id="btn-stop">Stop</button>
-      </div>
-
-      <div class="controls upload-row">
-        <label class="file-btn">
-          <input id="file-input" type="file" accept="image/*" hidden />
-          Recognize an image…
-        </label>
-        <span id="upload-result" class="meta"></span>
-      </div>
-      <div id="upload-preview"></div>
-    </section>
-
-    <section class="panel log-panel">
-      <div class="panel-head">
-        <h2>Detections</h2>
-        <div class="stats" id="stats">
-          <span><b id="stat-total">0</b> events</span>
-          <span><b id="stat-distinct">0</b> plates</span>
+  <div class="app">
+    <!-- ===== Top bar ===== -->
+    <header class="appbar">
+      <div class="brand">
+        <img class="brand-logo" src="/static/logo.png" alt="Platrix" />
+        <div class="brand-text">
+          <h1>Platrix</h1>
+          <span id="appbar-sub" class="brand-sub">Live ALPR</span>
         </div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Time</th><th>Plate</th><th>Score</th><th>Source</th><th>Snap</th></tr>
-          </thead>
-          <tbody id="events-body"></tbody>
-        </table>
+      <div class="status-pill" id="status-pill">
+        <span class="dot" id="status-dot"></span>
+        <span id="status-text">Idle</span>
       </div>
-    </section>
-  </main>
+    </header>
 
-  <footer>Platrix v<span id="version">·</span> — self-hosted ALPR engine</footer>
+    <!-- ===== Scrollable view area ===== -->
+    <main class="views">
+      <!-- ---------- LIVE ---------- -->
+      <section class="view active" id="view-live">
+        <div class="video-card">
+          <div class="video-wrap">
+            <img id="live" src="/api/stream/mjpeg" alt="Live feed" />
+            <div class="video-overlay" id="video-idle">
+              <span class="scan-frame">▣</span>
+              <p>No active source</p>
+            </div>
+            <div class="video-badge" id="video-fps">— fps</div>
+          </div>
+
+          <div class="control-block">
+            <label class="field-label">Camera / source</label>
+            <input id="source-input" type="text" inputmode="url"
+                   placeholder="0 · rtsp://user:pass@host/stream · /path/video.mp4" />
+
+            <label class="field-label">Direction</label>
+            <div class="seg" id="dir-seg">
+              <button data-dir="entry" class="seg-btn">⬇ Entry</button>
+              <button data-dir="unknown" class="seg-btn active">• None</button>
+              <button data-dir="exit" class="seg-btn">⬆ Exit</button>
+            </div>
+
+            <div class="btn-row">
+              <button id="btn-start" class="btn primary">▶ Start</button>
+              <button id="btn-stop" class="btn">■ Stop</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card upload-card">
+          <h3 class="card-title">Recognize an image</h3>
+          <label class="dropzone" id="dropzone">
+            <input id="file-input" type="file" accept="image/*" hidden />
+            <span class="dz-icon">＋</span>
+            <span>Tap to choose or drop an image</span>
+          </label>
+          <p id="upload-result" class="hint"></p>
+          <div id="upload-preview"></div>
+        </div>
+      </section>
+
+      <!-- ---------- EVENTS ---------- -->
+      <section class="view" id="view-events">
+        <div class="search-bar">
+          <span class="search-ico">🔍</span>
+          <input id="search-input" type="search" placeholder="Search plate…" />
+        </div>
+        <div class="chips" id="event-filters">
+          <button class="chip active" data-filter="all">All</button>
+          <button class="chip" data-filter="entry">⬇ Entry</button>
+          <button class="chip" data-filter="exit">⬆ Exit</button>
+          <button class="chip chip-white" data-filter="white">Whitelist</button>
+          <button class="chip chip-black" data-filter="black">Blacklist</button>
+        </div>
+        <div id="events-list" class="event-list"></div>
+        <p id="events-empty" class="empty">No detections yet.</p>
+      </section>
+
+      <!-- ---------- WATCHLIST ---------- -->
+      <section class="view" id="view-watch">
+        <div class="card">
+          <h3 class="card-title">Add a plate</h3>
+          <label class="field-label">Plate number</label>
+          <input id="watch-plate" type="text" placeholder="e.g. 12B34567" />
+          <label class="field-label">Owner / label</label>
+          <input id="watch-name" type="text" placeholder="e.g. Ali — Staff car" />
+          <label class="field-label">List</label>
+          <div class="seg" id="watch-seg">
+            <button data-list="white" class="seg-btn active seg-white">✓ Whitelist</button>
+            <button data-list="black" class="seg-btn seg-black">⁉ Blacklist</button>
+          </div>
+          <button id="btn-add-watch" class="btn primary full">＋ Add to list</button>
+          <p id="watch-result" class="hint"></p>
+        </div>
+
+        <div class="chips" id="watch-filters">
+          <button class="chip active" data-wf="all">All</button>
+          <button class="chip chip-white" data-wf="white">Whitelist</button>
+          <button class="chip chip-black" data-wf="black">Blacklist</button>
+        </div>
+        <div id="watch-list" class="event-list"></div>
+        <p id="watch-empty" class="empty">No plates on the list.</p>
+      </section>
+
+      <!-- ---------- STATS ---------- -->
+      <section class="view" id="view-stats">
+        <div class="stat-grid">
+          <div class="stat-tile"><span class="stat-num" id="s-total">0</span><span class="stat-lbl">Detections</span></div>
+          <div class="stat-tile"><span class="stat-num" id="s-distinct">0</span><span class="stat-lbl">Unique plates</span></div>
+          <div class="stat-tile"><span class="stat-num" id="s-entries">0</span><span class="stat-lbl">Entries</span></div>
+          <div class="stat-tile"><span class="stat-num" id="s-exits">0</span><span class="stat-lbl">Exits</span></div>
+          <div class="stat-tile tile-white"><span class="stat-num" id="s-white">0</span><span class="stat-lbl">Whitelist hits</span></div>
+          <div class="stat-tile tile-black"><span class="stat-num" id="s-black">0</span><span class="stat-lbl">Blacklist hits</span></div>
+        </div>
+        <div class="card">
+          <div class="kv"><span>Engine</span><b id="s-engine">—</b></div>
+          <div class="kv"><span>Watchlist size</span><b id="s-watch">—</b></div>
+          <div class="kv"><span>Last detection</span><b id="s-last">—</b></div>
+          <div class="kv"><span>Version</span><b id="s-version">—</b></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ===== Bottom navigation ===== -->
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-view="live">
+        <span class="nav-ico">🎥</span><span class="nav-lbl">Live</span>
+      </button>
+      <button class="nav-btn" data-view="events">
+        <span class="nav-ico">📋</span><span class="nav-lbl">Events</span>
+      </button>
+      <button class="nav-btn" data-view="watch">
+        <span class="nav-ico">🛡️</span><span class="nav-lbl">Watchlist</span>
+      </button>
+      <button class="nav-btn" data-view="stats">
+        <span class="nav-ico">📊</span><span class="nav-lbl">Stats</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Alert toast for blacklist hits -->
+  <div id="toast" class="toast"></div>
+
   <script src="/static/app.js"></script>
 </body>
 </html>

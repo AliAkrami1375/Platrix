@@ -29,8 +29,11 @@ plate it sees.
 | 🎥 **Any source** | Webcam, RTSP/HTTP IP cameras, video files, or single images — auto-detected from one string |
 | ⚡ **Real-time pipeline** | Threaded capture → detect → OCR → persist, with frame-striding, FPS throttling and duplicate suppression |
 | 🧠 **Pluggable engines** | Detection: classic **contour** (zero weights, works instantly) or **YOLO**. OCR: **CNN** or none |
+| 🛡️ **Watchlists** | Register named plates on a **whitelist** or **blacklist**; matches are flagged and alerted live |
+| 🚦 **Entry / exit** | Tag a source as an **entry** or **exit** lane; every read is logged with its direction |
+| 🔎 **Searchable log** | Filter detections by plate, direction, or whitelist/blacklist right from the app |
 | 🗄️ **Full audit trail** | Every read stored in SQLite with UTC timestamp, confidence, source and a cropped **snapshot** image |
-| 🌐 **Web dashboard** | Live annotated MJPEG feed, drag-in image recognition, and a live-updating detection table |
+| 📱 **Mobile-app dashboard** | Responsive PWA-style UI with bottom navigation — Live, Events, Watchlist and Stats |
 | 🔌 **Clean API** | REST endpoints + a WebSocket event stream for integration with your own systems |
 | 📦 **Self-hosted** | One `docker compose up`, or `pip install` and run. No cloud, no external calls — your data stays yours |
 
@@ -132,18 +135,26 @@ PLATRIX_DEFAULT_SOURCE="rtsp://user:pass@192.168.1.50:554/stream" platrix serve
 | `POST` | `/api/stream/stop` | Stop the active source |
 | `GET`  | `/api/stream/mjpeg` | Annotated MJPEG video stream |
 | `POST` | `/api/recognize` | Multipart image upload → detected plates + annotated preview |
-| `GET`  | `/api/events?limit=&plate=` | Query the detection log |
+| `GET`  | `/api/events?limit=&plate=&direction=&list_type=` | Search the detection log |
 | `GET`  | `/api/stats` | Aggregate statistics |
+| `GET`  | `/api/watchlist?list_type=` | List watchlisted plates |
+| `POST` | `/api/watchlist` | Add a named plate — `{ "plate", "name", "list_type": "white"\|"black" }` |
+| `DELETE` | `/api/watchlist/{id}` | Remove a watchlist entry |
 | `WS`   | `/ws/events` | Live detection events as JSON |
 
 ```bash
 # Recognize an uploaded image
 curl -F "file=@car.jpg" http://localhost:8080/api/recognize
 
-# Start an RTSP camera
+# Start an RTSP camera as an entry lane
 curl -X POST http://localhost:8080/api/stream/start \
      -H "Content-Type: application/json" \
-     -d '{"source":"rtsp://user:pass@host/stream"}'
+     -d '{"source":"rtsp://user:pass@host/stream","direction":"entry"}'
+
+# Add a plate to the blacklist with a name
+curl -X POST http://localhost:8080/api/watchlist \
+     -H "Content-Type: application/json" \
+     -d '{"plate":"12 ب 34567","name":"Stolen vehicle","list_type":"black"}'
 ```
 
 ---

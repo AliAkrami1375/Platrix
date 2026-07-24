@@ -30,6 +30,14 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 class StartRequest(BaseModel):
     source: str
     loop: bool = False
+    direction: str = "unknown"  # "entry" | "exit" | "unknown"
+
+
+class WatchRequest(BaseModel):
+    plate: str
+    name: str = ""
+    list_type: str = "white"  # "white" | "black"
+    note: str = ""
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -76,7 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/stream/start")
     def stream_start(req: StartRequest) -> dict:
         try:
-            manager.start(req.source, loop=req.loop)
+            manager.start(req.source, loop=req.loop, direction=req.direction)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return manager.status
@@ -95,7 +103,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # --- One-shot image recognition -------------------------------------
     @app.post("/api/recognize")
-    async def recognize(file: UploadFile = File(...)) -> dict:
+    async def recognize(
+        file: UploadFile = File(...),
+        direction: str = Query("unknown"),
+    ) -> dict:
         raw = await file.read()
         array = np.frombuffer(raw, dtype=np.uint8)
         image = cv2.imdecode(array, cv2.IMREAD_COLOR)
@@ -104,7 +115,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         frame = Frame(image=image, source=f"upload:{file.filename}")
         readings = manager.pipeline.process(frame)
-        events = [store.record(r).to_dict() for r in readings]
+        events = [store.record(r, direction=direction).to_dict() for r in readings]
 
         annotated = annotate(image, readings)
         ok, buf = cv2.imencode(".jpg", annotated)
@@ -123,12 +134,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def events(
         limit: int = Query(100, ge=1, le=1000),
         plate: str | None = Query(None),
+        direction: str | None = Query(None),
+        list_type: str | None = Query(None),
     ) -> dict:
-        return {"events": store.recent(limit=limit, plate=plate)}
+        return {
+            "events": store.recent(
+                limit=limit, plate=plate, direction=direction, list_type=list_type
+            )
+        }
 
     @app.get("/api/stats")
     def stats() -> dict:
         return store.stats()
+
+    # --- Watchlist (named plates, white / black list) --------------------
+    @app.get("/api/watchlist")
+    def watchlist_list(list_type: str | None = Query(None)) -> dict:
+        return {"entries": store.list_watch(list_type=list_type)}
+
+    @app.post("/api/watchlist")
+    def watchlist_add(req: WatchRequest) -> dict:
+        try:
+            return store.add_watch(
+                plate=req.plate,
+                name=req.name,
+                list_type=req.list_type,
+                note=req.note,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.delete("/api/watchlist/{entry_id}")
+    def watchlist_delete(entry_id: int) -> dict:
+        if not store.delete_watch(entry_id):
+            raise HTTPException(status_code=404, detail="Entry not found")
+        return {"deleted": entry_id}
 
     # --- Live event WebSocket -------------------------------------------
     @app.websocket("/ws/events")
