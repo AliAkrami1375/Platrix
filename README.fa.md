@@ -1,5 +1,7 @@
 <div align="center" dir="rtl">
 
+<img src="assets/banner.png" alt="Platrix — تشخیص بلادرنگ پلاک، کاملاً تحت کنترل شما" width="100%" />
+
 # ▣ پلاتریکس (Platrix)
 
 ### سامانهٔ بلادرنگ و سِلف‌هاست تشخیص و خواندن پلاک خودروهای ایرانی

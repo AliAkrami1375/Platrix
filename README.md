@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/banner.png" alt="Platrix — Real-Time License Plate Recognition, Fully Under Your Control" width="100%" />
+
 # ▣ Platrix
 
 ### Real-time, self-hosted Automatic License Plate Recognition (ALPR) for Iranian plates
