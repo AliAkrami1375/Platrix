@@ -200,6 +200,7 @@ async function startCamera(c) {
 
 $("btn-stop").onclick = async () => {
   await api("/api/stream/stop", { method: "POST" });
+  $("live").removeAttribute("src"); // close the MJPEG connection
   $("stream-current").textContent = "No active stream";
   refreshStatus();
 };

@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from typing import Callable, Optional
 
 import cv2
+import numpy as np
 
 from platrix.config import Settings
 from platrix.core.pipeline import RecognitionPipeline, annotate
@@ -40,6 +41,7 @@ class StreamManager:
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._latest_jpeg: Optional[bytes] = None
+        self._placeholder: Optional[bytes] = None
         self._current_spec: Optional[str] = None
         self._direction: str = "unknown"
         self._fps: float = 0.0
@@ -146,15 +148,35 @@ class StreamManager:
                 self._latest_jpeg = buf.tobytes()
 
     # -- MJPEG stream -----------------------------------------------------
+    def _placeholder_jpeg(self) -> bytes:
+        """A 'no signal' frame so the stream never hangs with an empty body."""
+        if self._placeholder is None:
+            img = np.zeros((360, 640, 3), dtype="uint8")
+            img[:] = (18, 22, 30)
+            text = "NO ACTIVE SOURCE"
+            (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)
+            cv2.putText(
+                img, text, ((640 - tw) // 2, (360 + th) // 2),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (120, 130, 150), 2, cv2.LINE_AA,
+            )
+            ok, buf = cv2.imencode(".jpg", img)
+            self._placeholder = buf.tobytes() if ok else b""
+        return self._placeholder
+
     def mjpeg(self) -> Iterator[bytes]:
-        """Yield a multipart MJPEG byte stream of the latest annotated frames."""
+        """Yield a multipart MJPEG byte stream of the latest annotated frames.
+
+        Always emits a frame (a placeholder when idle) so the client never sits
+        on an empty, never-closing response.
+        """
         boundary = b"--frame\r\n"
         while True:
             with self._lock:
                 jpeg = self._latest_jpeg
-            if jpeg is not None:
-                yield boundary + b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
-            time.sleep(0.03)
+            if jpeg is None:
+                jpeg = self._placeholder_jpeg()
+            yield boundary + b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
+            time.sleep(0.05)
 
     @property
     def recent_events(self) -> list[dict]:
