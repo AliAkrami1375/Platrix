@@ -62,10 +62,14 @@ The recognition flow has three swappable stages:
    - `yolo` — a YOLOv8 plate detector run through **ONNX Runtime** (no PyTorch needed at serve time). Robust on real photos under angle, motion and clutter; this is what makes end-to-end reading work on real images.
    - `contour` — a **weights-free** classic fallback combining a morphological text-region search (black-hat → gradient → wide close) with an edge/polygon finder, scored and NMS-ranked. Runs with no model at all.
    - `auto` *(default)* — uses `yolo` when a detector model is present, otherwise `contour`.
-2. **Segmentation + OCR** — split the plate into characters and classify them.
-   - `onnx` *(default)* — homomorphic-filter character segmentation feeding a CNN run through **ONNX Runtime** (portable, no TensorFlow needed), mapped to the Iranian plate alphabet (digits `0–9` + Persian letters).
-   - `cnn` — the same idea via a Keras/TensorFlow model, for existing `.h5` weights.
+2. **OCR — read the plate.**
+   - `crnn` *(recommended)* — a **segmentation-free** CRNN+CTC model that reads the whole plate in one pass through **ONNX Runtime**. No character splitting, so no split/merge errors — the most accurate option on real photos. Trained on realistic full-plate images (official font + augmentation).
+   - `onnx` — a per-character path: an enhancement + projection segmenter feeds a CNN classifier, with plate-grammar decoding and TTA. A fallback when no CRNN model is present.
+   - `cnn` — the per-character idea via a Keras/TensorFlow model.
    - `none` — detection-only mode (still logs snapshots and timestamps).
+   - `auto` *(default)* — uses `crnn` when its model is present, else `onnx`, else `none`.
+
+   A shared **enhancement layer** ([`platrix/preprocessing.py`](platrix/preprocessing.py)) upscales, denoises, contrast-corrects and sharpens the plate crop before OCR.
 3. **Persistence** — de-duplicated readings are written to SQLite with a cropped JPEG snapshot per event.
 
 ---
@@ -212,8 +216,8 @@ The ready-to-use Persian OCR model is published on Hugging Face:
 pip install huggingface_hub
 # OCR model + the YOLO plate detector (end-to-end reading on real photos)
 huggingface-cli download Dibachain/ocr-persian \
-    ocr_cnn.onnx ocr_cnn.labels.json plate_yolo.onnx --local-dir models/
-platrix serve   # auto-detects the models and uses YOLO + ONNX OCR
+    plate_yolo.onnx ocr_crnn.onnx ocr_crnn.labels.json --local-dir models/
+platrix serve   # auto-detects the models and uses YOLO + CRNN
 ```
 
 You can also **train your own** with the command above, or request the model by
@@ -226,6 +230,18 @@ email: **[dibachain@gmail.com](mailto:dibachain@gmail.com)**.
 
 A legacy Keras/TensorFlow trainer is available at `scripts/train_ocr_keras.py`
 for the `cnn` backend.
+
+### Training the whole-plate CRNN reader
+
+The recommended reader is trained on realistic full-plate images (rendered with
+the official plate font and heavy augmentation) whose text is encoded in each
+filename, then exported to ONNX:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+python scripts/train_crnn.py --data /path/to/generated_plates --epochs 15
+# → models/ocr_crnn.onnx  +  models/ocr_crnn.labels.json
+```
 
 ### Training the plate detector
 

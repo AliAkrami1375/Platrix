@@ -44,8 +44,9 @@ class Settings(BaseSettings):
     plate_aspect_max: float = 5.0
 
     # --- OCR -------------------------------------------------------------
-    ocr: str = "onnx"  # "onnx" | "cnn" | "none"
-    onnx_weights: Path = BASE_DIR / "models" / "ocr_cnn.onnx"
+    ocr: str = "auto"  # "auto" | "crnn" | "onnx" | "cnn" | "none"
+    crnn_weights: Path = BASE_DIR / "models" / "ocr_crnn.onnx"  # segmentation-free
+    onnx_weights: Path = BASE_DIR / "models" / "ocr_cnn.onnx"  # per-char classifier
     ocr_weights: Path = BASE_DIR / "models" / "ocr_cnn.h5"  # keras backend
     ocr_min_confidence: float = 0.40
 

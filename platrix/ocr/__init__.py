@@ -19,8 +19,21 @@ def build_ocr(settings: "Settings") -> "PlateOCR":
     from platrix.ocr.base import NullOCR
 
     name = settings.ocr.lower()
+    if name == "auto":
+        # Prefer the segmentation-free CRNN when its model is present.
+        if settings.crnn_weights.exists():
+            name = "crnn"
+        elif settings.onnx_weights.exists():
+            name = "onnx"
+        else:
+            name = "none"
+
     if name in ("none", "off", ""):
         return NullOCR()
+    if name == "crnn":
+        from platrix.ocr.crnn import CrnnOCR
+
+        return CrnnOCR(settings)
     if name == "onnx":
         from platrix.ocr.onnx_ocr import OnnxOCR
 

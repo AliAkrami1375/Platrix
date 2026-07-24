@@ -15,6 +15,8 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from platrix.preprocessing import enhance_plate
+
 _NORM_HEIGHT = 96  # normalize every plate to this height before segmenting
 
 
@@ -32,12 +34,12 @@ def _crop_to_plate(gray: np.ndarray) -> np.ndarray:
 
 
 def _binarize(plate_bgr: np.ndarray) -> np.ndarray:
-    gray = cv2.cvtColor(plate_bgr, cv2.COLOR_BGR2GRAY)
+    # Enhancement layer: upscale + denoise + contrast + sharpen (grayscale out).
+    gray = enhance_plate(plate_bgr)
     gray = _crop_to_plate(gray)
     h0, w0 = gray.shape
     scale = _NORM_HEIGHT / h0
     gray = cv2.resize(gray, (max(int(w0 * scale), 1), _NORM_HEIGHT))
-    gray = cv2.bilateralFilter(gray, 5, 40, 40)
     # Plates are dark chars on light: INV puts characters in white. Flip if the
     # crop is inverted so the (sparser) foreground stays white.
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
