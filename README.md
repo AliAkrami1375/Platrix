@@ -61,7 +61,8 @@ The recognition flow has three swappable stages:
    - `contour` *(default)* — a **weights-free** classic pipeline combining a morphological text-region search (black-hat → gradient → wide close, the standard robust ANPR technique) with the original edge/polygon finder. Candidates from both are scored by plate-likeness, de-duplicated, thresholded and ranked, so it locks onto the plate instead of returning stray corners. Runs the moment it's installed.
    - `yolo` — Ultralytics YOLO for maximum robustness under angle, motion and clutter (bring your own weights).
 2. **Segmentation + OCR** — split the plate into characters and classify them.
-   - `cnn` — homomorphic-filter character segmentation feeding a Keras CNN, mapped to the Iranian plate alphabet (digits `0–9` + Persian letters).
+   - `onnx` *(default)* — homomorphic-filter character segmentation feeding a CNN run through **ONNX Runtime** (portable, no TensorFlow needed), mapped to the Iranian plate alphabet (digits `0–9` + Persian letters).
+   - `cnn` — the same idea via a Keras/TensorFlow model, for existing `.h5` weights.
    - `none` — detection-only mode (still logs snapshots and timestamps).
 3. **Persistence** — de-duplicated readings are written to SQLite with a cropped JPEG snapshot per event.
 
@@ -182,25 +183,34 @@ file — see [`.env.example`](.env.example)):
 
 ---
 
-## 🧠 Training the OCR model
+## 🧠 Training the Persian OCR model
 
-The CNN OCR backend needs a model. Train one from a labelled character dataset
-(one folder per class):
-
-```
-dataset/
-  0/  1/  2/ … 9/       # digit classes
-  alef/ be/ jim/ …      # Persian letter classes
-```
+The `onnx` OCR backend needs a model. Train one from a labelled Persian
+character dataset (digit and letter glyph images), then point Platrix at it:
 
 ```bash
-python scripts/train_ocr.py --data dataset --epochs 60
-# → models/ocr_cnn.h5  +  models/ocr_cnn.labels.json
+pip install torch --index-url https://download.pytorch.org/whl/cpu   # training only
+python scripts/train_ocr.py --data /path/to/character-dataset --epochs 10
+# → models/ocr_cnn.onnx  +  models/ocr_cnn.labels.json
 ```
 
+The trainer folds the Arabic presentation forms back to base letters (NFKC),
+drops non-plate punctuation, augments each glyph (random scale / shift / rotate)
+so the model tolerates how the segmenter frames characters, and exports to ONNX.
 The label file records the output-neuron order so Platrix maps predictions back
-to the correct characters automatically. Until a model exists, Platrix runs in
-detection-only mode and still logs plates + snapshots.
+to the correct characters automatically.
+
+> **Model weights are not shipped in this repo.** You can train your own with
+> the command above, **or request the ready-to-use pre-trained model** by email:
+> **[dibachain@gmail.com](mailto:dibachain@gmail.com)** — send a message and
+> you'll receive the model download.
+>
+> Until a model is in place, Platrix runs in detection-only mode: it still
+> localizes plates and logs snapshots + timestamps, and you can label plates by
+> hand in the **Image Detection** tab.
+
+A legacy Keras/TensorFlow trainer is available at `scripts/train_ocr_keras.py`
+for the `cnn` backend.
 
 ---
 

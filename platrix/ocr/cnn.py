@@ -19,7 +19,6 @@ from platrix.config import Settings
 from platrix.core.types import PlateDetection
 from platrix.logging_conf import get_logger
 from platrix.ocr.base import PlateOCR
-from platrix.ocr.persian import format_plate
 from platrix.ocr.segmentation import segment_characters
 
 logger = get_logger(__name__)
@@ -98,6 +97,6 @@ class CnnOCR(PlateOCR):
         if not chars:
             return "", 0.0
 
-        ascii_text, _fa = format_plate(chars)
+        text = "".join(chars)
         mean_conf = float(np.mean(confidences)) if confidences else 0.0
-        return ascii_text, round(mean_conf, 4)
+        return text, round(mean_conf, 4)

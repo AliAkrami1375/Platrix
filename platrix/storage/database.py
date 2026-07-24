@@ -13,11 +13,20 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from platrix.config import Settings
 from platrix.core.types import PlateReading
+import re
 from datetime import datetime as _dt
 
 from platrix.logging_conf import get_logger
+
+_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 from platrix.ocr.persian import to_english_digits
-from platrix.storage.models import Base, Camera, DetectionEvent, WatchlistEntry
+from platrix.storage.models import (
+    AccessEmail,
+    Base,
+    Camera,
+    DetectionEvent,
+    WatchlistEntry,
+)
 
 logger = get_logger(__name__)
 
@@ -236,6 +245,25 @@ class EventStore:
             session.delete(cam)
             session.commit()
         return True
+
+    # -- access emails ----------------------------------------------------
+    def record_email(self, email: str, user_agent: str = "") -> dict:
+        email = (email or "").strip().lower()
+        if not _EMAIL_RE.match(email):
+            raise ValueError("Invalid email address")
+        entry = AccessEmail(email=email, user_agent=user_agent[:255])
+        with self._Session() as session:
+            session.add(entry)
+            session.commit()
+            session.refresh(entry)
+            data = entry.to_dict()
+        logger.info("ACCESS email=%s", email)
+        return data
+
+    def list_emails(self, limit: int = 500) -> list[dict]:
+        stmt = select(AccessEmail).order_by(desc(AccessEmail.created_at)).limit(limit)
+        with self._Session() as session:
+            return [e.to_dict() for e in session.scalars(stmt)]
 
     def stats(self) -> dict:
         with self._Session() as session:

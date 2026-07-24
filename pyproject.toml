@@ -19,10 +19,13 @@ dependencies = [
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
     "SQLAlchemy>=2.0",
+    "onnxruntime>=1.17",
+    "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]
-ml = ["tensorflow>=2.15", "ultralytics>=8.1"]
+train = ["torch>=2.2"]           # train the Persian OCR CNN -> ONNX
+yolo = ["ultralytics>=8.1"]      # optional YOLO detector backend
 dev = ["pytest>=8.0", "ruff>=0.4"]
 
 [project.scripts]

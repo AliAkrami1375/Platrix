@@ -1,4 +1,11 @@
-# Optional ML extras: CNN OCR + YOLO detection.
+# Optional extras for TRAINING the OCR model and the YOLO detector.
+# Inference at runtime only needs onnxruntime (already in requirements.txt).
+#
 # Install with:  pip install -r requirements.txt -r requirements-ml.txt
-tensorflow>=2.15
-ultralytics>=8.1
+#
+# PyTorch is used to train the Persian OCR CNN (scripts/train_ocr.py) and is
+# exported to ONNX. Install the CPU build to avoid the large CUDA packages:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.2
+ultralytics>=8.1        # optional YOLO detector backend
+# tensorflow>=2.15      # only for the legacy Keras OCR trainer (train_ocr_keras.py)

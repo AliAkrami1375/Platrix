@@ -382,7 +382,35 @@ function connectWs() {
   ws.onclose = () => setTimeout(connectWs, 3000);
 }
 
+/* ---------- access gate ---------- */
+const EMAIL_KEY = "platrix_access_email";
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function initGate() {
+  const gate = $("gate");
+  if (localStorage.getItem(EMAIL_KEY)) { gate.classList.add("hidden"); return; }
+  gate.classList.remove("hidden");
+  $("gate-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = $("gate-email").value.trim();
+    if (!EMAIL_RE.test(email)) { $("gate-error").textContent = "Please enter a valid email address."; return; }
+    $("gate-error").textContent = "";
+    try {
+      const r = await fetch("/api/access", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || "failed"); }
+      localStorage.setItem(EMAIL_KEY, email);
+      gate.classList.add("hidden");
+    } catch (err) {
+      $("gate-error").textContent = "Could not verify email. Please try again.";
+    }
+  });
+}
+
 async function boot() {
+  initGate();
   try {
     const h = await api("/api/health");
     $("s-version").textContent = h.version;

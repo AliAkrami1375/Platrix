@@ -1,8 +1,13 @@
 """Character segmentation for a cropped plate.
 
-Applies homomorphic filtering to normalize illumination, thresholds the plate,
-and extracts individual character boxes ordered left → right. This is a cleaned,
-dependency-light reworking of the original segmentation routine.
+Given a plate crop this isolates the individual characters (ordered left →
+right) and returns each as a fixed-size grayscale image ready for the OCR CNN.
+
+The approach is a **vertical projection profile**: normalize height, Otsu-
+threshold so characters are white on black (matching the training data), then
+scan the column-wise ink profile to find character bands separated by gaps.
+Projection segmentation keeps a Persian letter's dots together with its body
+(they share the same column band), which contour splitting does not.
 """
 
 from __future__ import annotations
@@ -10,79 +15,129 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+_NORM_HEIGHT = 96  # normalize every plate to this height before segmenting
 
-def _homomorphic(gray: np.ndarray, sigma: int = 15) -> np.ndarray:
-    """Illumination-normalizing homomorphic filter."""
-    rows, cols = gray.shape
-    img_log = np.log1p(np.asarray(gray, dtype="float") / 255.0)
 
-    m, n = 2 * rows + 1, 2 * cols + 1
-    x, y = np.meshgrid(np.linspace(0, n - 1, n), np.linspace(0, m - 1, m))
-    center_x, center_y = np.ceil(n / 2), np.ceil(m / 2)
-    gaussian = (x - center_x) ** 2 + (y - center_y) ** 2
+def _crop_to_plate(gray: np.ndarray) -> np.ndarray:
+    """Trim any dark border around the bright plate so Otsu isn't skewed."""
+    _, bright = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    contours, _ = cv2.findContours(bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return gray
+    x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
+    # Only accept it if it keeps most of the crop (a real plate fills the box).
+    if w * h >= 0.35 * gray.size and w > 20 and h > 10:
+        return gray[y : y + h, x : x + w]
+    return gray
 
-    h_low = np.exp(-gaussian / (2 * sigma * sigma))
-    h_high = 1 - h_low
-    h_low = np.fft.ifftshift(h_low)
-    h_high = np.fft.ifftshift(h_high)
 
-    freq = np.fft.fft2(img_log, (m, n))
-    out_low = np.real(np.fft.ifft2(freq * h_low, (m, n)))
-    out_high = np.real(np.fft.ifft2(freq * h_high, (m, n)))
+def _binarize(plate_bgr: np.ndarray) -> np.ndarray:
+    gray = cv2.cvtColor(plate_bgr, cv2.COLOR_BGR2GRAY)
+    gray = _crop_to_plate(gray)
+    h0, w0 = gray.shape
+    scale = _NORM_HEIGHT / h0
+    gray = cv2.resize(gray, (max(int(w0 * scale), 1), _NORM_HEIGHT))
+    gray = cv2.bilateralFilter(gray, 5, 40, 40)
+    # Plates are dark chars on light: INV puts characters in white. Flip if the
+    # crop is inverted so the (sparser) foreground stays white.
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    if binary.mean() > 127:
+        binary = cv2.bitwise_not(binary)
+    binary = cv2.morphologyEx(
+        binary, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    )
+    return binary
 
-    out = 0.5 * out_low[0:rows, 0:cols] + 1.5 * out_high[0:rows, 0:cols]
-    result = np.expm1(out)
-    span = np.max(result) - np.min(result)
-    if span == 0:
-        return np.zeros_like(gray, dtype="uint8")
-    result = (result - np.min(result)) / span
-    return np.array(255 * result, dtype="uint8")
+
+def _square_pad(glyph: np.ndarray, pad_ratio: float = 0.18) -> np.ndarray:
+    h, w = glyph.shape
+    side = max(h, w)
+    pad = int(side * pad_ratio)
+    side += pad * 2
+    canvas = np.zeros((side, side), dtype="uint8")
+    y0 = (side - h) // 2
+    x0 = (side - w) // 2
+    canvas[y0 : y0 + h, x0 : x0 + w] = glyph
+    return canvas
+
+
+def canonical_glyph(binary_glyph: np.ndarray, out_size: tuple[int, int] = (32, 32)) -> np.ndarray:
+    """Canonicalize a white-on-black glyph: tight-crop, square-pad, resize.
+
+    Used by BOTH the segmenter (at inference) and the trainer (on the dataset)
+    so the OCR model sees the same glyph framing in training and in production.
+    """
+    rows = np.where(binary_glyph.sum(axis=1) > 0)[0]
+    cols = np.where(binary_glyph.sum(axis=0) > 0)[0]
+    if rows.size == 0 or cols.size == 0:
+        return cv2.resize(binary_glyph, out_size, interpolation=cv2.INTER_AREA)
+    crop = binary_glyph[rows[0] : rows[-1] + 1, cols[0] : cols[-1] + 1]
+    crop = _square_pad(crop)
+    return cv2.resize(crop, out_size, interpolation=cv2.INTER_AREA)
+
+
+def _column_bands(binary: np.ndarray) -> list[tuple[int, int]]:
+    """Return (x_start, x_end) bands of contiguous inked columns."""
+    height, width = binary.shape
+    col_ink = (binary > 0).sum(axis=0)
+    active = col_ink > max(1, int(0.03 * height))
+
+    bands: list[tuple[int, int]] = []
+    start = None
+    for x in range(width):
+        if active[x] and start is None:
+            start = x
+        elif not active[x] and start is not None:
+            bands.append((start, x))
+            start = None
+    if start is not None:
+        bands.append((start, width))
+
+    # Merge bands separated by a very small gap (dots / broken strokes).
+    merged: list[tuple[int, int]] = []
+    min_gap = max(2, int(0.012 * width))
+    for band in bands:
+        if merged and band[0] - merged[-1][1] <= min_gap:
+            merged[-1] = (merged[-1][0], band[1])
+        else:
+            merged.append(band)
+    return merged
 
 
 def segment_characters(
     plate_bgr: np.ndarray,
-    out_size: tuple[int, int] = (60, 120),
+    out_size: tuple[int, int] = (32, 32),
     max_chars: int = 10,
 ) -> list[np.ndarray]:
-    """Return ordered grayscale character crops resized to ``out_size``.
+    """Return ordered grayscale character crops (white on black) at ``out_size``.
 
-    ``out_size`` is ``(width, height)`` matching the CNN input.
+    ``out_size`` is ``(width, height)``.
     """
     if plate_bgr is None or plate_bgr.size == 0:
         return []
 
-    gray = cv2.cvtColor(plate_bgr, cv2.COLOR_BGR2GRAY)
-    # Trim likely borders/bolts on the left/right edges.
-    h, w = gray.shape
-    if w > 60:
-        gray = gray[:, 20 : w - 15]
+    binary = _binarize(plate_bgr)
+    height, width = binary.shape
+    min_w = max(2, int(0.008 * width))
 
-    filtered = _homomorphic(gray)
-    binary = (filtered < 65).astype("uint8") * 255
-    binary = cv2.resize(binary, (150, 180), interpolation=cv2.INTER_AREA)
-
-    contours, _ = cv2.findContours(
-        binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-    )
-    boxes = [cv2.boundingRect(c) for c in contours]
-
-    # Character-height heuristic: keep boxes near the tallest glyph.
-    if not boxes:
-        return []
-    max_h = max(bh for (_, _, _, bh) in boxes)
-    height_floor = max_h - max_h / 5.0
-
-    chars: list[tuple[int, np.ndarray]] = []
-    for (x, y, bw, bh) in boxes:
-        if bw <= 2 or bh < height_floor:
+    glyphs: list[np.ndarray] = []
+    for x0, x1 in _column_bands(binary):
+        if x1 - x0 < min_w:
             continue
-        y0, y1 = max(y - 5, 0), min(y + bh + 5, binary.shape[0])
-        x0, x1 = max(x - 5, 0), min(x + bw + 5, binary.shape[1])
-        glyph = binary[y0:y1, x0:x1]
-        if glyph.size == 0:
+        band = binary[:, x0:x1]
+        rows = np.where(band.sum(axis=1) > 0)[0]
+        if rows.size == 0:
             continue
-        glyph = cv2.resize(glyph, out_size, interpolation=cv2.INTER_AREA)
-        chars.append((x, glyph))
+        y0, y1 = int(rows[0]), int(rows[-1])
+        bw, bh = x1 - x0, y1 - y0 + 1
+        # A character spans a reasonable fraction of the plate height (digits can
+        # be short, so keep this permissive) and fills enough of its own box
+        # (rejects sparse noise / stray marks).
+        if bh < 0.18 * height:
+            continue
+        density = int((band > 0).sum()) / float(bw * bh)
+        if density < 0.06:
+            continue
+        glyphs.append(canonical_glyph(band[y0 : y1 + 1], out_size))
 
-    chars.sort(key=lambda item: item[0])  # left → right
-    return [g for _, g in chars[:max_chars]]
+    return glyphs[:max_chars]

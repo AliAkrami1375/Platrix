@@ -8,7 +8,16 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -48,6 +57,10 @@ class CameraRequest(BaseModel):
 
 class TestRequest(BaseModel):
     url: str
+
+
+class AccessRequest(BaseModel):
+    email: str
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -245,6 +258,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             pass
         finally:
             manager.unsubscribe(on_event)
+
+    # --- Access gate (email capture) ------------------------------------
+    @app.post("/api/access")
+    def access(req: AccessRequest, request: Request) -> dict:
+        ua = request.headers.get("user-agent", "")
+        try:
+            return store.record_email(req.email, user_agent=ua)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/access")
+    def access_list() -> dict:
+        return {"emails": store.list_emails()}
 
     # --- Static + dashboard ---------------------------------------------
     app.mount(

@@ -44,8 +44,9 @@ class Settings(BaseSettings):
     plate_aspect_max: float = 5.0
 
     # --- OCR -------------------------------------------------------------
-    ocr: str = "cnn"  # "cnn" | "none"
-    ocr_weights: Path = BASE_DIR / "models" / "ocr_cnn.h5"
+    ocr: str = "onnx"  # "onnx" | "cnn" | "none"
+    onnx_weights: Path = BASE_DIR / "models" / "ocr_cnn.onnx"
+    ocr_weights: Path = BASE_DIR / "models" / "ocr_cnn.h5"  # keras backend
     ocr_min_confidence: float = 0.40
 
     # --- Pipeline / streaming -------------------------------------------

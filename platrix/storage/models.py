@@ -117,3 +117,25 @@ class Camera(Base):
             "direction": self.direction,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class AccessEmail(Base):
+    """An email captured at the access gate."""
+
+    __tablename__ = "access_emails"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    user_agent: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "email": self.email,
+            "user_agent": self.user_agent,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }

@@ -240,6 +240,23 @@
   </div>
 
   <div id="toast" class="toast"></div>
+
+  <!-- ===== Access gate (email) ===== -->
+  <div id="gate" class="gate hidden">
+    <div class="gate-card">
+      <img src="/static/logo.png" alt="Platrix" class="gate-logo" />
+      <h2>Welcome to Platrix</h2>
+      <p>Enter your email to access the recognition dashboard.</p>
+      <form id="gate-form" autocomplete="on">
+        <input id="gate-email" type="email" inputmode="email" required
+               placeholder="you@example.com" />
+        <button type="submit" class="btn primary full">Continue</button>
+      </form>
+      <p id="gate-error" class="gate-error"></p>
+      <span class="gate-foot">Self-hosted ALPR · your data stays on your server</span>
+    </div>
+  </div>
+
   <script src="/static/app.js"></script>
 </body>
 </html>

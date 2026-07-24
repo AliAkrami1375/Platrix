@@ -1,0 +1,116 @@
+"""ONNX-based Persian OCR backend.
+
+Segments the plate into characters, classifies each with an ONNX CNN via
+``onnxruntime`` (portable, no TensorFlow/PyTorch needed at serve time), and maps
+predictions to the Iranian plate alphabet. Train the model with
+``python scripts/train_ocr.py``.
+
+If the model file is missing the backend degrades gracefully: detection and
+snapshot logging keep working while ``read`` returns an empty string.
+"""
+
+from __future__ import annotations
+
+import json
+
+import cv2
+import numpy as np
+
+from platrix.config import Settings
+from platrix.core.types import PlateDetection
+from platrix.logging_conf import get_logger
+from platrix.ocr.base import PlateOCR
+from platrix.ocr.segmentation import segment_characters
+
+logger = get_logger(__name__)
+
+IMG_SIZE = 32  # must match scripts/train_ocr.py
+
+
+class OnnxOCR(PlateOCR):
+    """Segment-then-classify OCR using an ONNX CNN."""
+
+    name = "onnx"
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        self._session = None
+        self._labels: list[str] = []
+        self._input_name: str = "input"
+        self._tried = False
+
+    def warmup(self) -> None:
+        self._load()
+
+    def _load(self):
+        if self._session is not None or self._tried:
+            return self._session
+        self._tried = True
+
+        weights = self.settings.onnx_weights
+        if not weights.exists():
+            logger.warning(
+                "OCR model not found at %s — running detection-only. "
+                "Train one with: python scripts/train_ocr.py --data <dataset>",
+                weights,
+            )
+            return None
+        try:
+            import onnxruntime as ort
+        except ImportError:  # pragma: no cover
+            logger.warning("onnxruntime not installed — OCR disabled.")
+            return None
+
+        labels_path = weights.with_suffix(".labels.json")
+        if not labels_path.exists():
+            logger.warning("Label map %s missing — OCR disabled.", labels_path)
+            return None
+
+        logger.info("Loading ONNX OCR model from %s", weights)
+        self._session = ort.InferenceSession(
+            str(weights), providers=["CPUExecutionProvider"]
+        )
+        self._input_name = self._session.get_inputs()[0].name
+        self._labels = json.loads(labels_path.read_text(encoding="utf-8"))
+        return self._session
+
+    def read(self, detection: PlateDetection) -> tuple[str, float]:
+        session = self._load()
+        if session is None:
+            return "", 0.0
+
+        glyphs = segment_characters(detection.crop, out_size=(IMG_SIZE, IMG_SIZE))
+        if not glyphs:
+            return "", 0.0
+
+        batch = np.stack(glyphs).astype("float32") / 255.0
+        batch = batch.reshape(len(glyphs), 1, IMG_SIZE, IMG_SIZE)
+        logits = session.run(None, {self._input_name: batch})[0]
+        probs = _softmax(logits)
+
+        chars: list[str] = []
+        confidences: list[float] = []
+        for row in probs:
+            idx = int(np.argmax(row))
+            conf = float(row[idx])
+            if conf < self.settings.ocr_min_confidence:
+                continue
+            if 0 <= idx < len(self._labels):
+                chars.append(self._labels[idx])
+                confidences.append(conf)
+
+        if not chars:
+            return "", 0.0
+
+        # Labels are already ASCII digits + Persian letters, so join directly:
+        # this preserves the Persian letter (e.g. "12ب34567") for display and
+        # for watchlist matching (which normalizes digits but keeps letters).
+        text = "".join(chars)
+        mean_conf = float(np.mean(confidences)) if confidences else 0.0
+        return text, round(mean_conf, 4)
+
+
+def _softmax(x: np.ndarray) -> np.ndarray:
+    x = x - x.max(axis=1, keepdims=True)
+    e = np.exp(x)
+    return e / e.sum(axis=1, keepdims=True)

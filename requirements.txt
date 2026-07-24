@@ -7,3 +7,5 @@ python-multipart>=0.0.9
 pydantic>=2.6
 pydantic-settings>=2.2
 SQLAlchemy>=2.0
+onnxruntime>=1.17
+Pillow>=10.0
