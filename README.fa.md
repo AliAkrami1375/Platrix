@@ -191,15 +191,21 @@ curl -H "Authorization: Bearer pltx_xxx" \
 # روش ۱ — با ابزار Hugging Face (پیشنهادی)
 pip install -U "huggingface_hub[cli]"
 huggingface-cli download Dibachain/Platrix \
-    plate_yolo.onnx ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json \
+    plate_yolo.onnx plate_yolo_fallback.onnx \
+    ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json \
     --local-dir models/
 
 # روش ۲ — دانلود ساده، بدون ابزار اضافه
 base=https://huggingface.co/Dibachain/Platrix/resolve/main
-for f in plate_yolo.onnx ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json; do
+for f in plate_yolo.onnx plate_yolo_fallback.onnx ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json; do
     curl -L "$base/$f" -o "models/$f"
 done
 ```
+
+> **دو مرحله‌ای هوشمند:** آشکارساز اصلی سریع است؛ فقط وقتی چیزی پیدا نکند،
+> آشکارساز دوم (`plate_yolo_fallback.onnx`) روی همان فریم اجرا می‌شود و پلاک‌های
+> سختِ دوربین‌های نظارتی (خاکستری/کم‌نور/کوچک/کامیون) را که مدل اصلی نمی‌بیند
+> نجات می‌دهد — نرخ خواندن روی عکس واقعی از ~۹۶٪ به ~۹۸٪ می‌رسد.
 
 <div dir="rtl">
 

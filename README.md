@@ -214,19 +214,21 @@ The trained models are hosted on Hugging Face (not committed to this repo):
 # Option 1 — Hugging Face CLI (recommended)
 pip install -U "huggingface_hub[cli]"
 huggingface-cli download Dibachain/Platrix \
-    plate_yolo.onnx ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json \
+    plate_yolo.onnx plate_yolo_fallback.onnx \
+    ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json \
     --local-dir models/
 
 # Option 2 — plain download, no extra tools
 base=https://huggingface.co/Dibachain/Platrix/resolve/main
-for f in plate_yolo.onnx ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json; do
+for f in plate_yolo.onnx plate_yolo_fallback.onnx ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json; do
     curl -L "$base/$f" -o "models/$f"
 done
 ```
 
 | File | Role |
 |------|------|
-| `plate_yolo.onnx` | YOLO plate **detector** |
+| `plate_yolo.onnx` | YOLO plate **detector** (primary) |
+| `plate_yolo_fallback.onnx` | **Secondary detector** — runs only when the primary finds nothing; recovers hard surveillance frames (grayscale / dim / small / truck plates) |
 | `ocr_crnn.onnx` (+ `.labels.json`) | Whole-plate **CRNN reader** (recommended) |
 | `ocr_cnn.onnx` (+ `.labels.json`) | Per-character classifier (lightweight fallback) |
 
