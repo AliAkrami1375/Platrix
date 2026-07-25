@@ -37,6 +37,9 @@
       </nav>
       <div class="side-foot">
         <div class="status-pill"><span class="dot" id="status-dot-side"></span><span id="status-text-side">Idle</span></div>
+        <button id="btn-settings" class="icon-btn" title="Settings">
+          <svg viewBox="0 0 24 24" class="ic-s"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </button>
         <button id="btn-logout" class="icon-btn" title="Sign out">
           <svg viewBox="0 0 24 24" class="ic-s"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         </button>
@@ -245,6 +248,55 @@
   </div>
 
   <div id="toast" class="toast"></div>
+
+  <!-- ===== Settings modal ===== -->
+  <div id="settings" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Settings</h2>
+        <button id="settings-close" class="icon-btn" title="Close">
+          <svg viewBox="0 0 24 24" class="ic-s"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <section class="settings-section">
+        <h3 class="card-title">Account — username &amp; password</h3>
+        <label class="field-label">New username</label>
+        <input id="set-user" type="text" placeholder="admin" autocomplete="username" />
+        <label class="field-label">Current password</label>
+        <input id="set-cur" type="password" autocomplete="current-password" />
+        <label class="field-label">New password</label>
+        <input id="set-new" type="password" autocomplete="new-password" />
+        <button id="btn-save-creds" class="btn primary full">Update credentials</button>
+        <p id="creds-msg" class="hint"></p>
+      </section>
+
+      <hr class="divider" />
+
+      <section class="settings-section">
+        <h3 class="card-title">API access tokens</h3>
+        <p class="hint" style="margin-top:0">Use a token with <code>Authorization: Bearer &lt;token&gt;</code> to call the API programmatically.</p>
+        <div class="btn-row">
+          <input id="tok-name" type="text" placeholder="Token name (e.g. integration)" />
+          <button id="btn-create-token" class="btn primary">Create</button>
+        </div>
+        <div id="tok-new" class="tok-new hidden">
+          <span class="hint">Copy it now — it won't be shown again:</span>
+          <div class="tok-value"><code id="tok-raw"></code><button id="btn-copy-token" class="btn sm">Copy</button></div>
+        </div>
+        <div id="token-list" class="event-list" style="margin-top:12px"></div>
+        <p id="token-empty" class="empty">No tokens yet.</p>
+      </section>
+
+      <hr class="divider" />
+
+      <section class="settings-section">
+        <h3 class="card-title">API documentation</h3>
+        <p class="hint" style="margin-top:0">Interactive OpenAPI docs (Swagger UI) for integrating Platrix.</p>
+        <a href="/docs" target="_blank" rel="noopener" class="btn full">Open API docs ↗</a>
+      </section>
+    </div>
+  </div>
 
   <!-- ===== Access gate (login) ===== -->
   <div id="gate" class="gate hidden">

@@ -45,3 +45,39 @@ def test_csv_export(tmp_path):
         assert r.status_code == 200
         assert "text/csv" in r.headers["content-type"]
         assert r.text.splitlines()[0].startswith("time,plate")
+
+
+def test_password_hash_roundtrip():
+    h = auth.hash_password("hunter2")
+    assert auth.verify_password("hunter2", h)
+    assert not auth.verify_password("wrong", h)
+
+
+def test_change_credentials_then_login(tmp_path):
+    with _app(tmp_path) as c:
+        c.post("/api/login", json={"username": "admin", "password": "secret"})
+        r = c.post("/api/account/password", json={
+            "current_password": "secret", "new_username": "ali", "new_password": "newpass"})
+        assert r.status_code == 200
+        c.post("/api/logout")
+        # old creds rejected, new creds accepted
+        assert c.post("/api/login", json={"username": "admin", "password": "secret"}).status_code == 401
+        assert c.post("/api/login", json={"username": "ali", "password": "newpass"}).status_code == 200
+
+
+def test_api_token_access(tmp_path):
+    with _app(tmp_path) as c:
+        c.post("/api/login", json={"username": "admin", "password": "secret"})
+        tok = c.post("/api/tokens", json={"name": "ci"}).json()["token"]
+        assert tok.startswith("pltx_")
+        assert len(c.get("/api/tokens").json()["tokens"]) == 1
+        c.post("/api/logout")
+        # cookie gone → 401, but Bearer token works
+        assert c.get("/api/events").status_code == 401
+        r = c.get("/api/events", headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 200
+
+
+def test_docs_public(tmp_path):
+    with _app(tmp_path) as c:
+        assert c.get("/openapi.json").status_code == 200  # reachable without login

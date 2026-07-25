@@ -412,6 +412,72 @@ if (_logout) _logout.onclick = async () => {
   location.reload();
 };
 
+/* ---------- settings modal ---------- */
+const _settings = $("btn-settings");
+if (_settings) _settings.onclick = () => { $("settings").classList.remove("hidden"); loadTokens(); };
+if ($("settings-close")) $("settings-close").onclick = () => $("settings").classList.add("hidden");
+if ($("settings")) $("settings").addEventListener("click", (e) => { if (e.target.id === "settings") $("settings").classList.add("hidden"); });
+
+if ($("btn-save-creds")) $("btn-save-creds").onclick = async () => {
+  const body = {
+    new_username: $("set-user").value.trim(),
+    current_password: $("set-cur").value,
+    new_password: $("set-new").value,
+  };
+  const r = await fetch("/api/account/password", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (r.ok) {
+    $("creds-msg").textContent = "Credentials updated ✓";
+    $("set-cur").value = ""; $("set-new").value = "";
+    toast("Credentials updated", "white");
+  } else $("creds-msg").textContent = d.detail || "Could not update.";
+};
+
+async function loadTokens() {
+  const { tokens } = await api("/api/tokens");
+  const list = $("token-list");
+  list.innerHTML = "";
+  tokens.forEach((t) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `
+      <div class="row-main">
+        <div class="row-plate" style="font-size:14px">${esc(t.name)}</div>
+        <div class="row-sub"><code>${esc(t.prefix)}…</code> · created ${fmtTime(t.created_at)}${t.last_used_at ? " · used " + fmtTime(t.last_used_at) : ""}</div>
+      </div>
+      <button class="row-del" title="Revoke">
+        <svg viewBox="0 0 24 24" class="ic-s"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6"/></svg>
+      </button>`;
+    row.querySelector(".row-del").onclick = async () => {
+      await fetch("/api/tokens/" + t.id, { method: "DELETE" });
+      loadTokens();
+    };
+    list.appendChild(row);
+  });
+  $("token-empty").style.display = tokens.length ? "none" : "block";
+}
+
+if ($("btn-create-token")) $("btn-create-token").onclick = async () => {
+  const r = await fetch("/api/tokens", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: $("tok-name").value.trim() || "token" }),
+  });
+  const d = await r.json();
+  if (r.ok && d.token) {
+    $("tok-raw").textContent = d.token;
+    $("tok-new").classList.remove("hidden");
+    $("tok-name").value = "";
+    loadTokens();
+  }
+};
+if ($("btn-copy-token")) $("btn-copy-token").onclick = () => {
+  const t = $("tok-raw").textContent;
+  navigator.clipboard?.writeText(t);
+  toast("Token copied", "white");
+};
+
 /* export the current detection-history query as CSV */
 const _export = $("btn-hist-export");
 if (_export) _export.onclick = () => {

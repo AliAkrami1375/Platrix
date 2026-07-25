@@ -20,8 +20,11 @@ from platrix.logging_conf import get_logger
 
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 from platrix.ocr.persian import to_english_digits
+from platrix.server import auth as _auth
 from platrix.storage.models import (
     AccessEmail,
+    ApiToken,
+    AppSetting,
     Base,
     Camera,
     DetectionEvent,
@@ -264,6 +267,70 @@ class EventStore:
         stmt = select(AccessEmail).order_by(desc(AccessEmail.created_at)).limit(limit)
         with self._Session() as session:
             return [e.to_dict() for e in session.scalars(stmt)]
+
+    # -- app settings (dashboard credentials) -----------------------------
+    def _get_setting(self, key: str) -> str | None:
+        with self._Session() as session:
+            row = session.get(AppSetting, key)
+            return row.value if row else None
+
+    def _set_setting(self, key: str, value: str) -> None:
+        with self._Session() as session:
+            row = session.get(AppSetting, key)
+            if row is None:
+                session.add(AppSetting(key=key, value=value))
+            else:
+                row.value = value
+            session.commit()
+
+    def get_credentials(self) -> tuple[str | None, str | None]:
+        """Return (username, password_hash) if set in the DB, else (None, None)."""
+        return self._get_setting("auth_user"), self._get_setting("auth_password_hash")
+
+    def set_credentials(self, username: str, password: str) -> None:
+        self._set_setting("auth_user", username)
+        self._set_setting("auth_password_hash", _auth.hash_password(password))
+        logger.info("Dashboard credentials updated (user=%s)", username)
+
+    # -- API tokens -------------------------------------------------------
+    def add_api_token(self, name: str) -> tuple[str, dict]:
+        """Create a token; returns (raw_token, row). The raw token is shown once."""
+        raw = _auth.new_api_token()
+        entry = ApiToken(name=name.strip() or "token", token_hash=_auth.hash_api_token(raw),
+                         prefix=raw[:10])
+        with self._Session() as session:
+            session.add(entry)
+            session.commit()
+            session.refresh(entry)
+            data = entry.to_dict()
+        logger.info("API token created: %s (%s…)", data["name"], data["prefix"])
+        return raw, data
+
+    def list_api_tokens(self) -> list[dict]:
+        stmt = select(ApiToken).order_by(desc(ApiToken.created_at))
+        with self._Session() as session:
+            return [t.to_dict() for t in session.scalars(stmt)]
+
+    def delete_api_token(self, token_id: int) -> bool:
+        with self._Session() as session:
+            t = session.get(ApiToken, token_id)
+            if t is None:
+                return False
+            session.delete(t)
+            session.commit()
+        return True
+
+    def verify_api_token(self, raw: str) -> bool:
+        if not raw:
+            return False
+        h = _auth.hash_api_token(raw)
+        with self._Session() as session:
+            t = session.scalars(select(ApiToken).where(ApiToken.token_hash == h)).first()
+            if t is None:
+                return False
+            t.last_used_at = datetime.now(timezone.utc)
+            session.commit()
+        return True
 
     def stats(self) -> dict:
         with self._Session() as session:

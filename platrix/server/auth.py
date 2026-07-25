@@ -7,15 +7,18 @@ self-hosted deployment without pulling in a session library.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
+import secrets
 
 from platrix.config import Settings
 
 COOKIE_NAME = "platrix_auth"
+_PBKDF2_ROUNDS = 100_000
 
-# Paths reachable without authentication (login page assets + auth endpoints).
-_PUBLIC_PREFIXES = ("/static/", "/favicon")
+# Paths reachable without authentication (login page assets + auth + API docs).
+_PUBLIC_PREFIXES = ("/static/", "/favicon", "/docs", "/redoc", "/openapi")
 _PUBLIC_EXACT = {"/", "/api/health", "/api/login", "/api/logout", "/api/me"}
 
 
@@ -47,3 +50,29 @@ def is_public_path(path: str) -> bool:
     if path in _PUBLIC_EXACT:
         return True
     return any(path.startswith(p) for p in _PUBLIC_PREFIXES)
+
+
+# --- password hashing (PBKDF2, stdlib) -------------------------------------
+def hash_password(password: str, salt: bytes | None = None) -> str:
+    salt = salt or secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _PBKDF2_ROUNDS)
+    return f"{base64.b64encode(salt).decode()}${base64.b64encode(dk).decode()}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        salt_b64, dk_b64 = stored.split("$", 1)
+        salt = base64.b64decode(salt_b64)
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _PBKDF2_ROUNDS)
+        return hmac.compare_digest(base64.b64encode(dk).decode(), dk_b64)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# --- API tokens ------------------------------------------------------------
+def new_api_token() -> str:
+    return "pltx_" + secrets.token_urlsafe(32)
+
+
+def hash_api_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()

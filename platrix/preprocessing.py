@@ -65,12 +65,31 @@ _CRNN_CLAHE = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
 
 def prep_crnn(img: np.ndarray, size: tuple[int, int] = (128, 32)) -> np.ndarray:
-    """Preprocess a plate crop for the CRNN: grayscale → CLAHE → resize.
+    """Enhance a plate crop, then size it for the CRNN.
 
-    Deliberately light and fast (real-time) and applied the SAME way when
-    training and when serving, so the model never sees a distribution shift.
+    Quality/denoising layer applied **identically** in training and at serve
+    time (so the model never sees a distribution shift):
+
+      1. grayscale
+      2. **upscale** small crops (cubic) so thin strokes survive — recovers
+         detail on far / low-resolution plates
+      3. **edge-preserving denoise** (bilateral — fast enough for real time,
+         keeps character edges while removing sensor noise)
+      4. **local contrast** (CLAHE) for shadows / glare
+      5. **unsharp mask** to crisp the strokes
+      6. resize to the model input
+
     ``size`` is ``(width, height)``. Returns a ``uint8`` grayscale image.
     """
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
-    gray = _CRNN_CLAHE.apply(gray)
+
+    h, w = gray.shape[:2]
+    if h < 40:  # small/far plate → upscale before enhancing
+        scale = 40.0 / h
+        gray = cv2.resize(gray, (max(int(w * scale), 1), 40), interpolation=cv2.INTER_CUBIC)
+
+    gray = cv2.bilateralFilter(gray, 5, 45, 45)          # denoise, keep edges
+    gray = _CRNN_CLAHE.apply(gray)                         # local contrast
+    blurred = cv2.GaussianBlur(gray, (0, 0), 1.0)
+    gray = cv2.addWeighted(gray, 1.4, blurred, -0.4, 0)   # unsharp
     return cv2.resize(gray, size, interpolation=cv2.INTER_AREA)

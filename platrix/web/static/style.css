@@ -179,6 +179,28 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 .kv:last-child { border-bottom: none; }
 .kv span { color: var(--muted); }
 
+/* ===== Settings modal ===== */
+.modal {
+  position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-start;
+  justify-content: center; padding: 40px 16px; overflow-y: auto;
+  background: rgba(5, 8, 13, 0.7); backdrop-filter: blur(4px);
+}
+.modal.hidden { display: none; }
+.modal-card {
+  width: 100%; max-width: 520px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 16px; padding: 22px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5); animation: fade 0.25s ease;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.modal-head h2 { margin: 0; font-size: 19px; }
+.settings-section { margin-bottom: 4px; }
+.tok-new { margin-top: 12px; background: var(--surface-2); border: 1px solid var(--white-c); border-radius: 10px; padding: 12px; }
+.tok-new.hidden { display: none; }
+.tok-value { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.tok-value code { flex: 1; font-family: "Consolas", monospace; font-size: 13px; word-break: break-all; color: var(--white-c); }
+code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+a.btn { text-decoration: none; align-items: center; justify-content: center; }
+
 /* ===== Access gate ===== */
 .gate {
   position: fixed; inset: 0; z-index: 100;

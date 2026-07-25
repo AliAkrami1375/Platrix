@@ -70,6 +70,16 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_username: str
+    new_password: str
+
+
+class TokenRequest(BaseModel):
+    name: str = "token"
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
@@ -101,18 +111,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    def _valid_login(username: str, password: str) -> bool:
+        db_user, db_hash = store.get_credentials()
+        if db_user and db_hash:  # credentials changed via the dashboard
+            return username == db_user and auth.verify_password(password, db_hash)
+        return auth.check_credentials(settings, username, password)
+
+    def _current_user(request: Request) -> str | None:
+        return auth.verify_token(request.cookies.get(auth.COOKIE_NAME), settings.secret_key)
+
     @app.middleware("http")
     async def require_auth(request: Request, call_next):
         if settings.auth_enabled and not auth.is_public_path(request.url.path):
-            token = request.cookies.get(auth.COOKIE_NAME)
-            if auth.verify_token(token, settings.secret_key) is None:
+            ok = _current_user(request) is not None
+            if not ok:  # allow programmatic access via a Bearer API token
+                header = request.headers.get("authorization", "")
+                if header.startswith("Bearer "):
+                    ok = store.verify_api_token(header[7:].strip())
+            if not ok:
                 return JSONResponse({"detail": "Authentication required"}, status_code=401)
         return await call_next(request)
 
     # --- Authentication --------------------------------------------------
     @app.post("/api/login")
     def login(req: LoginRequest) -> JSONResponse:
-        if not auth.check_credentials(settings, req.username, req.password):
+        if not _valid_login(req.username, req.password):
             raise HTTPException(status_code=401, detail="Invalid username or password")
         token = auth.make_token(req.username, settings.secret_key)
         resp = JSONResponse({"ok": True, "username": req.username})
@@ -130,9 +153,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/me")
     def me(request: Request) -> dict:
         if not settings.auth_enabled:
-            return {"authenticated": True, "auth_enabled": False}
-        user = auth.verify_token(request.cookies.get(auth.COOKIE_NAME), settings.secret_key)
+            return {"authenticated": True, "auth_enabled": False, "username": settings.auth_user}
+        user = _current_user(request)
         return {"authenticated": user is not None, "auth_enabled": True, "username": user}
+
+    @app.post("/api/account/password")
+    def change_credentials(req: PasswordChange, request: Request) -> JSONResponse:
+        current = _current_user(request) or store.get_credentials()[0] or settings.auth_user
+        if not _valid_login(current, req.current_password):
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+        new_user = req.new_username.strip() or current
+        if len(req.new_password) < 4:
+            raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+        store.set_credentials(new_user, req.new_password)
+        token = auth.make_token(new_user, settings.secret_key)
+        resp = JSONResponse({"ok": True, "username": new_user})
+        resp.set_cookie(
+            auth.COOKIE_NAME, token, httponly=True, samesite="lax", max_age=7 * 24 * 3600
+        )
+        return resp
+
+    # --- API tokens ------------------------------------------------------
+    @app.get("/api/tokens")
+    def tokens_list() -> dict:
+        return {"tokens": store.list_api_tokens()}
+
+    @app.post("/api/tokens")
+    def tokens_create(req: TokenRequest) -> dict:
+        raw, data = store.add_api_token(req.name)
+        return {"token": raw, **data}  # raw token is returned only once
+
+    @app.delete("/api/tokens/{token_id}")
+    def tokens_delete(token_id: int) -> dict:
+        if not store.delete_api_token(token_id):
+            raise HTTPException(status_code=404, detail="Token not found")
+        return {"deleted": token_id}
 
     # --- Meta ------------------------------------------------------------
     @app.get("/api/health")

@@ -139,3 +139,36 @@ class AccessEmail(Base):
             "user_agent": self.user_agent,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class AppSetting(Base):
+    """Key/value store for runtime settings (e.g. dashboard credentials)."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(512), default="")
+
+
+class ApiToken(Base):
+    """A named API access token (only its hash is stored)."""
+
+    __tablename__ = "api_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(80), default="")
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    prefix: Mapped[str] = mapped_column(String(12), default="")  # shown in the UI
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "prefix": self.prefix,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
+        }
