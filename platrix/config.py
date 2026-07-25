@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # --- Detection -------------------------------------------------------
     detector: str = "auto"  # "auto" | "contour" | "yolo"
     yolo_weights: Path = BASE_DIR / "models" / "plate_yolo.pt"
-    detection_confidence: float = 0.35
+    detection_confidence: float = 0.5  # ignore weak / non-plate detections
     min_plate_area: int = 1000
     plate_aspect_min: float = 2.2
     plate_aspect_max: float = 5.0
