@@ -104,6 +104,7 @@ class Camera(Base):
     name: Mapped[str] = mapped_column(String(80), default="")
     url: Mapped[str] = mapped_column(String(512))
     direction: Mapped[str] = mapped_column(String(16), default="unknown")  # entry|exit|unknown
+    enabled: Mapped[bool] = mapped_column(default=False)  # always-on monitoring
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -115,6 +116,7 @@ class Camera(Base):
             "name": self.name,
             "url": self.url,
             "direction": self.direction,
+            "enabled": self.enabled,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

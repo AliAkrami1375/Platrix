@@ -30,7 +30,7 @@ from platrix.config import Settings, get_settings
 from platrix.core.pipeline import annotate
 from platrix.core.types import Frame
 from platrix.logging_conf import configure_logging, get_logger
-from platrix.server.streaming import StreamManager
+from platrix.server.multistream import ADHOC_ID, MultiStreamManager
 from platrix.storage import EventStore
 
 logger = get_logger(__name__)
@@ -55,6 +55,10 @@ class CameraRequest(BaseModel):
     name: str = ""
     url: str
     direction: str = "unknown"
+
+
+class CameraToggle(BaseModel):
+    enabled: bool
 
 
 class TestRequest(BaseModel):
@@ -86,17 +90,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings.ensure_dirs()
 
     store = EventStore(settings)
-    manager = StreamManager(settings, store)
+    manager = MultiStreamManager(settings, store)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Auto-start every camera marked "always-on" (surveillance mode).
+        manager.start_enabled(store.list_cameras())
         if settings.default_source:
             try:
-                manager.start(settings.default_source)
+                manager.start_adhoc(settings.default_source)
             except Exception:  # noqa: BLE001
                 logger.exception("Failed to start default source")
         yield
-        manager.stop()
+        manager.stop_all()
 
     app = FastAPI(
         title="Platrix API",
@@ -254,26 +260,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/status")
     def status() -> dict:
-        return {**manager.status, "stats": store.stats()}
+        return {**manager.overall_status(), "cameras": manager.statuses(), "stats": store.stats()}
 
-    # --- Live source control --------------------------------------------
+    # --- Live source control (ad-hoc "view a URL") ----------------------
     @app.post("/api/stream/start")
     def stream_start(req: StartRequest) -> dict:
         try:
-            manager.start(req.source, loop=req.loop, direction=req.direction)
+            manager.start_adhoc(req.source, direction=req.direction, loop=req.loop)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return manager.status
+        return manager.overall_status()
 
     @app.post("/api/stream/stop")
     def stream_stop() -> dict:
-        manager.stop()
-        return manager.status
+        manager.stop_camera(ADHOC_ID)
+        return manager.overall_status()
 
     @app.get("/api/stream/mjpeg")
-    def stream_mjpeg() -> StreamingResponse:
+    def stream_mjpeg(camera: int = Query(ADHOC_ID)) -> StreamingResponse:
         return StreamingResponse(
-            manager.mjpeg(),
+            manager.mjpeg(camera),
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
 
@@ -395,7 +401,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # --- Cameras (saved video streams) ----------------------------------
     @app.get("/api/cameras")
     def cameras_list() -> dict:
-        return {"cameras": store.list_cameras()}
+        cams = store.list_cameras()
+        live = manager.statuses()
+        for c in cams:  # merge live connection status
+            c["status"] = live.get(c["id"], {}).get("state", "off")
+            c["live_fps"] = live.get(c["id"], {}).get("fps", 0)
+        return {"cameras": cams}
 
     @app.post("/api/cameras")
     def cameras_add(req: CameraRequest) -> dict:
@@ -404,8 +415,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.patch("/api/cameras/{camera_id}")
+    def cameras_toggle(camera_id: int, req: CameraToggle) -> dict:
+        """Turn a camera's always-on monitoring on/off."""
+        cam = store.set_camera_enabled(camera_id, req.enabled)
+        if cam is None:
+            raise HTTPException(status_code=404, detail="Camera not found")
+        if req.enabled:
+            manager.start_camera(cam)
+        else:
+            manager.stop_camera(camera_id)
+        return cam
+
     @app.delete("/api/cameras/{camera_id}")
     def cameras_delete(camera_id: int) -> dict:
+        manager.stop_camera(camera_id)
         if not store.delete_camera(camera_id):
             raise HTTPException(status_code=404, detail="Camera not found")
         return {"deleted": camera_id}

@@ -154,7 +154,10 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 .row.list-white { border-left: 3px solid var(--white-c); }
 .row-snap { width: 58px; height: 42px; border-radius: 7px; object-fit: cover; background: var(--surface-2); flex: 0 0 auto; border: 1px solid var(--border); }
 .row-main { flex: 1; min-width: 0; }
-.row-plate { font-family: "Consolas", "Courier New", monospace; font-weight: 700; font-size: 16px; letter-spacing: 0.5px; }
+.row-plate { font-family: "Consolas", "Courier New", monospace; font-weight: 700; font-size: 16px; letter-spacing: 0.5px; direction: ltr; unicode-bidi: bidi-override; text-align: left; }
+/* Keep plate strings (digits + a Persian letter) in strict left-to-right order,
+   so the letter never jumps position under the browser's bidi algorithm. */
+.plate-ltr, input.lbl-plate, #watch-plate, #set-user { direction: ltr; unicode-bidi: bidi-override; }
 .row-sub { font-size: 12px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-side { text-align: right; flex: 0 0 auto; }
 .row-time { font-size: 12px; color: var(--muted); }
@@ -253,6 +256,14 @@ a.btn { text-decoration: none; align-items: center; justify-content: center; }
 .cam-play { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface); color: var(--accent); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .cam-play:hover { border-color: var(--accent); background: var(--accent); color: #fff; }
 .cam-name { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.cam-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 6px currentColor; }
+/* always-on toggle switch */
+.switch { position: relative; display: inline-block; width: 40px; height: 22px; flex: 0 0 auto; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .slider { position: absolute; cursor: pointer; inset: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; transition: 0.2s; }
+.switch .slider::before { content: ""; position: absolute; height: 16px; width: 16px; left: 2px; top: 2px; background: var(--muted); border-radius: 50%; transition: 0.2s; }
+.switch input:checked + .slider { background: var(--white-c); border-color: var(--white-c); }
+.switch input:checked + .slider::before { transform: translateX(18px); background: #fff; }
 
 /* test result colors */
 .hint .ok { color: var(--white-c); font-weight: 600; }

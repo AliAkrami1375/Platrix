@@ -34,3 +34,7 @@ yolo11*.pt
 .vscode/
 .idea/
 .DS_Store
+
+# never commit backups or stray model blobs
+*.bak
+models/*.bak

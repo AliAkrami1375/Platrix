@@ -62,14 +62,34 @@ class EventStore:
             future=True,
         )
         Base.metadata.create_all(self._engine)
+        self._migrate()
         self._Session: sessionmaker[Session] = sessionmaker(
             bind=self._engine, expire_on_commit=False, future=True
         )
         self._snap_lock = threading.Lock()
+        # -- (migration helper defined below runs before this line via _migrate)
         # In-memory watchlist index: normalized_plate -> (name, list_type).
         self._watch_lock = threading.Lock()
         self._watch_index: dict[str, tuple[str, str]] = {}
         self._reload_watch_index()
+
+    # -- schema migration (additive columns for older DBs) ----------------
+    def _migrate(self) -> None:
+        additions = [
+            ("cameras", "enabled", "BOOLEAN DEFAULT 0"),
+            ("detection_events", "direction", "VARCHAR(16) DEFAULT 'unknown'"),
+            ("detection_events", "matched_name", "VARCHAR(64) DEFAULT ''"),
+            ("detection_events", "matched_list", "VARCHAR(16) DEFAULT ''"),
+        ]
+        with self._engine.begin() as conn:
+            for table, col, decl in additions:
+                try:
+                    existing = [r[1] for r in conn.exec_driver_sql(f"PRAGMA table_info({table})")]
+                except Exception:  # noqa: BLE001 - table may not exist yet
+                    continue
+                if existing and col not in existing:
+                    conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+                    logger.info("DB migrated: added %s.%s", table, col)
 
     # -- snapshots --------------------------------------------------------
     def _write_snapshot(self, reading: PlateReading) -> Optional[str]:
@@ -248,6 +268,21 @@ class EventStore:
             session.delete(cam)
             session.commit()
         return True
+
+    def set_camera_enabled(self, camera_id: int, enabled: bool) -> dict | None:
+        with self._Session() as session:
+            cam = session.get(Camera, camera_id)
+            if cam is None:
+                return None
+            cam.enabled = enabled
+            session.commit()
+            session.refresh(cam)
+            return cam.to_dict()
+
+    def get_camera(self, camera_id: int) -> dict | None:
+        with self._Session() as session:
+            cam = session.get(Camera, camera_id)
+            return cam.to_dict() if cam else None
 
     # -- access emails ----------------------------------------------------
     def record_email(self, email: str, user_agent: str = "") -> dict:

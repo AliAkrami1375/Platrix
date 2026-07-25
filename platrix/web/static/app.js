@@ -96,7 +96,7 @@ function addDetectCard(ev) {
       <span class="conf">${Math.round((ev.detection_confidence || 0) * 100)}%</span>
     </div>
     <div class="label-row">
-      <input class="lbl-plate" type="text" placeholder="Plate number" value="${esc(read)}" />
+      <input class="lbl-plate" dir="ltr" type="text" placeholder="Plate number" value="${esc(read)}" />
       <input class="lbl-name" type="text" placeholder="Owner / label" />
     </div>
     <div class="label-actions">
@@ -181,18 +181,25 @@ function cameraRow(c) {
   row.className = "cam-row";
   const dirBadge = c.direction && c.direction !== "unknown"
     ? `<span class="badge ${c.direction}">${c.direction}</span>` : "";
+  const stateColors = { online: "var(--white-c)", reconnecting: "var(--exit-c)", connecting: "var(--accent)", error: "var(--black-c)" };
+  const dotColor = stateColors[c.status] || "var(--muted)";
+  const sub = `${esc(c.url)} · ${c.status || "off"}${c.live_fps ? " · " + c.live_fps + "fps" : ""}`;
   row.innerHTML = `
-    <button class="cam-play" title="View">
+    <button class="cam-play" title="View live">
       <svg viewBox="0 0 24 24" class="ic-s"><polygon points="6 4 20 12 6 20 6 4"/></svg>
     </button>
     <div class="row-main">
-      <div class="cam-name">${esc(c.name)} ${dirBadge}</div>
-      <div class="row-sub">${esc(c.url)}</div>
+      <div class="cam-name"><span class="cam-dot" style="background:${dotColor}"></span>${esc(c.name)} ${dirBadge}</div>
+      <div class="row-sub">${sub}</div>
     </div>
+    <label class="switch" title="Always-on monitoring">
+      <input type="checkbox" ${c.enabled ? "checked" : ""} /><span class="slider"></span>
+    </label>
     <button class="row-del" title="Remove">
       <svg viewBox="0 0 24 24" class="ic-s"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6"/></svg>
     </button>`;
-  row.querySelector(".cam-play").onclick = () => startCamera(c);
+  row.querySelector(".cam-play").onclick = () => viewCamera(c);
+  row.querySelector(".switch input").onchange = (e) => toggleCamera(c.id, e.target.checked);
   row.querySelector(".row-del").onclick = async () => {
     await afetch("/api/cameras/" + c.id, { method: "DELETE" });
     loadCameras();
@@ -200,12 +207,26 @@ function cameraRow(c) {
   return row;
 }
 
-async function startCamera(c) {
-  await api("/api/stream/start", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source: c.url, direction: c.direction }),
+async function toggleCamera(id, enabled) {
+  await afetch("/api/cameras/" + id, {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
   });
-  $("live").src = withToken("/api/stream/mjpeg?t=" + Date.now());
+  toast(enabled ? "Camera is now always-on" : "Camera monitoring stopped", enabled ? "white" : "black");
+  setTimeout(loadCameras, 400);
+}
+
+async function viewCamera(c) {
+  if (!c.enabled) {
+    // ad-hoc view for a camera that isn't in always-on mode
+    await api("/api/stream/start", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: c.url, direction: c.direction }),
+    });
+    $("live").src = withToken("/api/stream/mjpeg?t=" + Date.now());
+  } else {
+    $("live").src = withToken(`/api/stream/mjpeg?camera=${c.id}&t=` + Date.now());
+  }
   $("stream-current").textContent = `Viewing: ${c.name}`;
   refreshStatus();
 }
@@ -371,9 +392,12 @@ function setStatus(running, label) {
 async function refreshStatus() {
   try {
     const s = await api("/api/status");
-    setStatus(s.running, s.running ? "Live" : "Idle");
+    const active = s.active_cameras || 0;
+    setStatus(s.running, s.running ? (active > 1 ? `${active} cameras` : "Live") : "Idle");
     $("video-fps").textContent = s.running ? `${s.fps} fps` : "— fps";
     $("video-idle").style.display = s.running ? "none" : "flex";
+    // keep camera connection dots fresh while viewing the Stream tab
+    if ($("view-stream").classList.contains("active")) loadCameras();
   } catch (_) {}
 }
 function handleAlert(ev) {
