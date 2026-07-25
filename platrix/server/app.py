@@ -11,6 +11,7 @@ import numpy as np
 from fastapi import (
     FastAPI,
     File,
+    Form,
     HTTPException,
     Query,
     Request,
@@ -25,8 +26,13 @@ from pydantic import BaseModel
 
 from platrix.server import auth
 
+import json
+import os
+import subprocess
+import sys
+
 from platrix import __version__
-from platrix.config import Settings, get_settings
+from platrix.config import BASE_DIR, Settings, get_settings
 from platrix.core.pipeline import annotate
 from platrix.core.types import Frame
 from platrix.logging_conf import configure_logging, get_logger
@@ -82,6 +88,12 @@ class PasswordChange(BaseModel):
 
 class TokenRequest(BaseModel):
     name: str = "token"
+
+
+class TrainRequest(BaseModel):
+    epochs: int = 15
+    device: str = "auto"        # "auto" | "cpu" | "gpu"
+    install_cuda: bool = False  # opt-in: install a CUDA build if using the GPU
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -179,7 +191,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Browser <img> requests (MJPEG stream / snapshots) can't send headers,
         # so those two paths also accept the cookie or a ?token= query param.
         path = request.url.path
-        if path.startswith("/api/stream/mjpeg") or path.startswith("/snapshots"):
+        if (path.startswith("/api/stream/mjpeg") or path.startswith("/snapshots")
+                or path.startswith("/learn-media")):
             if auth.verify_token(request.cookies.get(auth.COOKIE_NAME), settings.secret_key):
                 return True
             qt = request.query_params.get("token")
@@ -475,6 +488,98 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             manager.unsubscribe(on_event)
 
+    # --- Learn (train on user-labelled samples) -------------------------
+    @app.get("/api/system/gpu")
+    def system_gpu() -> dict:
+        from platrix.server.system import gpu_info
+
+        return gpu_info()
+
+    @app.post("/api/learn/samples")
+    async def learn_add(
+        file: UploadFile = File(...),
+        plate: str = Form(...),
+        x: float = Form(...), y: float = Form(...),
+        w: float = Form(...), h: float = Form(...),
+    ) -> dict:
+        raw = await file.read()
+        return store.add_learn_sample(raw, plate, {"x": x, "y": y, "w": w, "h": h})
+
+    @app.get("/api/learn/samples")
+    def learn_list() -> dict:
+        return {"samples": store.list_learn_samples()}
+
+    @app.delete("/api/learn/samples/{sample_id}")
+    def learn_delete(sample_id: int) -> dict:
+        if not store.delete_learn_sample(sample_id):
+            raise HTTPException(status_code=404, detail="Sample not found")
+        return {"deleted": sample_id}
+
+    def _job_file():
+        return store.learn_dir() / "job.json"
+
+    @app.get("/api/learn/status")
+    def learn_status() -> dict:
+        jf = _job_file()
+        if jf.exists():
+            try:
+                return json.loads(jf.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                pass
+        return {"status": "idle"}
+
+    @app.post("/api/learn/train")
+    def learn_train(req: TrainRequest) -> dict:
+        jf = _job_file()
+        if jf.exists():
+            try:
+                if json.loads(jf.read_text()).get("status") == "running":
+                    raise HTTPException(status_code=409, detail="Training already running")
+            except HTTPException:
+                raise
+            except Exception:  # noqa: BLE001
+                pass
+        samples = store.list_learn_samples()
+        if not samples:
+            raise HTTPException(status_code=400, detail="Add at least one labelled sample first")
+
+        images = store.learn_dir() / "images"
+        dump = [
+            {"image_path": str(images / s["image_file"]), "plate_text": s["plate_text"],
+             "bbox": s["bbox"]}
+            for s in samples
+        ]
+        (store.learn_dir() / "samples.json").write_text(
+            json.dumps(dump, ensure_ascii=False), encoding="utf-8"
+        )
+        jf.write_text(json.dumps(
+            {"status": "running", "step": "launching", "progress": 0, "log": []},
+            ensure_ascii=False,
+        ), encoding="utf-8")
+
+        cmd = [
+            sys.executable, "scripts/learn_train.py",
+            "--job", str(jf), "--samples", str(store.learn_dir() / "samples.json"),
+            "--out", str(settings.crnn_weights),
+            "--epochs", str(max(1, min(req.epochs, 60))), "--device", req.device,
+        ]
+        synthetic = "/root/crnn_ds15k"
+        if os.path.isdir(synthetic):
+            cmd += ["--synthetic", synthetic, "--synthetic-limit", "1500"]
+        if req.install_cuda:
+            cmd += ["--install-cuda"]
+        # Detached so it keeps running independently of the browser/session.
+        subprocess.Popen(
+            cmd, cwd=str(BASE_DIR), start_new_session=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        return {"ok": True, "started": True}
+
+    @app.post("/api/learn/apply")
+    def learn_apply() -> dict:
+        manager.reload_models()
+        return {"ok": True}
+
     # --- Access gate (email capture) ------------------------------------
     @app.post("/api/access")
     def access(req: AccessRequest, request: Request) -> dict:
@@ -498,6 +603,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         StaticFiles(directory=str(settings.snapshots_dir)),
         name="snapshots",
     )
+    # Serve Learn sample images (thumbnails in the annotation UI).
+    learn_images = settings.data_dir / "learn" / "images"
+    learn_images.mkdir(parents=True, exist_ok=True)
+    app.mount("/learn-media", StaticFiles(directory=str(learn_images)), name="learn-media")
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:

@@ -7,6 +7,7 @@ from platrix.storage.models import (
     Base,
     Camera,
     DetectionEvent,
+    LearnSample,
     WatchlistEntry,
 )
 from platrix.storage.database import EventStore

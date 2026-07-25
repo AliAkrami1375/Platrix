@@ -182,6 +182,28 @@ input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px 
 .kv:last-child { border-bottom: none; }
 .kv span { color: var(--muted); }
 
+/* ===== Learn / Train ===== */
+.gpu-banner { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 10px; padding: 11px 14px; margin-bottom: 16px; font-size: 13px; color: var(--muted); }
+.gpu-banner.has-gpu { border-color: var(--white-c); color: var(--text); }
+.canvas-wrap { margin-top: 12px; }
+.canvas-wrap.hidden { display: none; }
+.canvas-wrap canvas { width: 100%; border-radius: 10px; border: 1px solid var(--border); cursor: crosshair; background: #000; display: block; }
+.pill-count { background: var(--accent); color: #fff; border-radius: 999px; padding: 1px 9px; font-size: 12px; margin-left: 6px; }
+.learn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.learn-samp { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); }
+.learn-samp img { width: 100%; height: 62px; object-fit: cover; display: block; }
+.learn-samp .lab { font-size: 11px; padding: 3px 5px; text-align: center; direction: ltr; unicode-bidi: bidi-override; font-family: monospace; }
+.learn-samp .del { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.6); border: none; color: #fff; border-radius: 5px; cursor: pointer; padding: 2px 5px; font-size: 11px; }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin: 12px 0; cursor: pointer; }
+.check-row input { width: auto; }
+.train-progress { margin-top: 16px; background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 12px; padding: 14px; }
+.train-progress.hidden { display: none; }
+.progress-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
+.progress-bar { height: 8px; background: var(--surface); border-radius: 999px; overflow: hidden; }
+.progress-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.4s; }
+.progress-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.train-log { max-height: 160px; overflow-y: auto; background: var(--bg); border-radius: 8px; padding: 10px; font-size: 11px; color: var(--muted); margin-top: 10px; white-space: pre-wrap; }
+
 /* ===== Settings modal ===== */
 .modal {
   position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-start;

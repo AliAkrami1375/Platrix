@@ -355,6 +355,54 @@ class EventStore:
             session.commit()
         return True
 
+    # -- learn samples ----------------------------------------------------
+    def learn_dir(self) -> Path:
+        d = self.settings.data_dir / "learn"
+        (d / "images").mkdir(parents=True, exist_ok=True)
+        return d
+
+    def add_learn_sample(self, image_bytes: bytes, plate_text: str, bbox: dict) -> dict:
+        import uuid
+
+        from platrix.storage.models import LearnSample
+
+        images = self.learn_dir() / "images"
+        fname = f"{uuid.uuid4().hex[:16]}.jpg"
+        (images / fname).write_bytes(image_bytes)
+        entry = LearnSample(
+            image_file=fname, plate_text=plate_text.strip(),
+            bx=float(bbox.get("x", 0)), by=float(bbox.get("y", 0)),
+            bw=float(bbox.get("w", 1)), bh=float(bbox.get("h", 1)),
+        )
+        with self._Session() as session:
+            session.add(entry)
+            session.commit()
+            session.refresh(entry)
+            data = entry.to_dict()
+        logger.info("Learn sample added: %r", plate_text)
+        return data
+
+    def list_learn_samples(self) -> list[dict]:
+        from platrix.storage.models import LearnSample
+
+        stmt = select(LearnSample).order_by(desc(LearnSample.created_at))
+        with self._Session() as session:
+            return [s.to_dict() for s in session.scalars(stmt)]
+
+    def delete_learn_sample(self, sample_id: int) -> bool:
+        from platrix.storage.models import LearnSample
+
+        with self._Session() as session:
+            s = session.get(LearnSample, sample_id)
+            if s is None:
+                return False
+            img = self.learn_dir() / "images" / s.image_file
+            if img.exists():
+                img.unlink()
+            session.delete(s)
+            session.commit()
+        return True
+
     def verify_api_token(self, raw: str) -> bool:
         if not raw:
             return False

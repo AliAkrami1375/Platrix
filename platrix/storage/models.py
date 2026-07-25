@@ -143,6 +143,33 @@ class AccessEmail(Base):
         }
 
 
+class LearnSample(Base):
+    """A user-labelled training sample: an image, a plate box, and the text."""
+
+    __tablename__ = "learn_samples"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    image_file: Mapped[str] = mapped_column(String(255))
+    plate_text: Mapped[str] = mapped_column(String(32), default="")
+    # Normalized plate box (0..1) within the image.
+    bx: Mapped[float] = mapped_column(Float, default=0.0)
+    by: Mapped[float] = mapped_column(Float, default=0.0)
+    bw: Mapped[float] = mapped_column(Float, default=1.0)
+    bh: Mapped[float] = mapped_column(Float, default=1.0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "image_file": self.image_file,
+            "plate_text": self.plate_text,
+            "bbox": {"x": self.bx, "y": self.by, "w": self.bw, "h": self.bh},
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class AppSetting(Base):
     """Key/value store for runtime settings (e.g. dashboard credentials)."""
 

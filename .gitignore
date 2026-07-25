@@ -38,3 +38,8 @@ yolo11*.pt
 # never commit backups or stray model blobs
 *.bak
 models/*.bak
+
+# large local datasets (never commit)
+Iranis-dataset/
+*-dataset/
+crnn_ds*/

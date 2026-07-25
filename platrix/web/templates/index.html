@@ -34,6 +34,10 @@
           <svg viewBox="0 0 24 24" class="ic"><line x1="5" y1="20" x2="5" y2="11"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="19" y1="20" x2="19" y2="14"/></svg>
           <span>Statistics</span>
         </button>
+        <button class="nav-btn" data-view="learn">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M12 3L2 9l10 6 10-6-10-6z"/><path d="M2 9v6l10 6 10-6V9"/></svg>
+          <span>Learn / Train</span>
+        </button>
       </nav>
       <div class="side-foot">
         <div class="status-pill"><span class="dot" id="status-dot-side"></span><span id="status-text-side">Idle</span></div>
@@ -227,6 +231,66 @@
             <div class="kv"><span>Version</span><b id="s-version">—</b></div>
           </div>
         </section>
+
+        <!-- ================= LEARN / TRAIN ================= -->
+        <section class="view" id="view-learn">
+          <div id="gpu-banner" class="gpu-banner">Detecting hardware…</div>
+          <div class="split">
+            <div class="card">
+              <h3 class="card-title">1 · Annotate a plate</h3>
+              <p class="hint" style="margin-top:0">Upload a photo, drag a box around the plate, then type the plate exactly.</p>
+              <label class="dropzone" id="learn-dz">
+                <input id="learn-file" type="file" accept="image/*" hidden />
+                <svg viewBox="0 0 24 24" class="ic-lg"><path d="M12 16V4"/><path d="M8 8l4-4 4 4"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+                <span>Choose an image</span>
+              </label>
+              <div id="canvas-wrap" class="canvas-wrap hidden">
+                <canvas id="learn-canvas"></canvas>
+                <p class="hint" id="canvas-hint">Drag to draw a box around the plate.</p>
+                <label class="field-label">Plate number (standard: 2 digits · letter · 3 digits · 2 digits)</label>
+                <input id="learn-plate" dir="ltr" type="text" placeholder="e.g. 12 ب 345 67" />
+                <button id="learn-add" class="btn primary full">Add sample</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3 class="card-title">2 · Dataset <span id="sample-count" class="pill-count">0</span></h3>
+              <div id="learn-samples" class="learn-grid"></div>
+              <p id="learn-empty" class="empty">No samples yet.</p>
+
+              <hr class="divider" />
+              <h3 class="card-title">3 · Train the model</h3>
+              <label class="field-label">Compute device</label>
+              <div class="seg" id="dev-seg">
+                <button data-dev="auto" class="seg-btn active">Auto</button>
+                <button data-dev="cpu" class="seg-btn">CPU</button>
+                <button data-dev="gpu" class="seg-btn">GPU</button>
+              </div>
+              <label class="check-row" id="cuda-row" style="display:none">
+                <input id="learn-cuda" type="checkbox" /> Install CUDA if needed (large download; your choice)
+              </label>
+              <div class="btn-row">
+                <label class="field-label" style="margin:0;align-self:center">Epochs</label>
+                <input id="learn-epochs" type="number" value="15" min="1" max="60" style="max-width:90px" />
+                <button id="learn-start" class="btn primary">Start training</button>
+              </div>
+
+              <div id="train-progress" class="train-progress hidden">
+                <div class="progress-head">
+                  <span id="train-step">preparing…</span>
+                  <span id="train-pct">0%</span>
+                </div>
+                <div class="progress-bar"><div id="train-fill" class="progress-fill"></div></div>
+                <div class="progress-meta">
+                  <span id="train-device">—</span>
+                  <span id="train-acc"></span>
+                </div>
+                <pre id="train-log" class="train-log"></pre>
+                <button id="train-apply" class="btn primary full hidden">Apply the new model</button>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
 
@@ -243,6 +307,9 @@
       </button>
       <button class="nav-btn" data-view="stats">
         <svg viewBox="0 0 24 24" class="ic"><line x1="5" y1="20" x2="5" y2="11"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="19" y1="20" x2="19" y2="14"/></svg><span>Stats</span>
+      </button>
+      <button class="nav-btn" data-view="learn">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M12 3L2 9l10 6 10-6-10-6z"/><path d="M2 9v6l10 6 10-6V9"/></svg><span>Learn</span>
       </button>
     </nav>
   </div>

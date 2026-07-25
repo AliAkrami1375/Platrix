@@ -49,8 +49,8 @@ function toast(msg, kind = "black") {
 }
 
 /* ---------- navigation ---------- */
-const titles = { image: "Image Detection", stream: "Video Stream", watch: "Watchlist", stats: "Statistics" };
-const subtitles = { image: "Upload & recognize", stream: "Cameras & live view", watch: "Lists & history search", stats: "System overview" };
+const titles = { image: "Image Detection", stream: "Video Stream", watch: "Watchlist", stats: "Statistics", learn: "Learn / Train" };
+const subtitles = { image: "Upload & recognize", stream: "Cameras & live view", watch: "Lists & history search", stats: "System overview", learn: "Teach it new plates" };
 function switchView(view) {
   document.querySelectorAll(".nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
@@ -60,6 +60,156 @@ function switchView(view) {
   if (view === "stream") { loadCameras(); loadStreamLog(); }
   if (view === "watch") { loadWatchlist(); runHistorySearch(); }
   if (view === "stats") loadStats();
+  if (view === "learn") initLearn();
+}
+
+/* ================= LEARN / TRAIN ================= */
+const learn = { img: null, file: null, box: null, drawing: false, dev: "auto", poll: null, inited: false };
+
+function initLearn() {
+  loadGpu();
+  loadLearnSamples();
+  pollTraining();  // resume showing progress if a job is already running
+  if (learn.inited) return;
+  learn.inited = true;
+
+  $("learn-file").onchange = (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    learn.file = f;
+    const img = new Image();
+    img.onload = () => {
+      learn.img = img; learn.box = null;
+      const cv = $("learn-canvas");
+      const scale = Math.min(1, 900 / img.width);
+      cv.width = img.width * scale; cv.height = img.height * scale;
+      drawCanvas();
+      $("canvas-wrap").classList.remove("hidden");
+    };
+    img.src = URL.createObjectURL(f);
+  };
+
+  const cv = $("learn-canvas");
+  const pos = (e) => {
+    const r = cv.getBoundingClientRect();
+    const cx = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+    const cy = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
+    return { x: cx * cv.width / r.width, y: cy * cv.height / r.height };
+  };
+  const down = (e) => { e.preventDefault(); const p = pos(e); learn.box = { x0: p.x, y0: p.y, x1: p.x, y1: p.y }; learn.drawing = true; };
+  const move = (e) => { if (!learn.drawing) return; const p = pos(e); learn.box.x1 = p.x; learn.box.y1 = p.y; drawCanvas(); };
+  const up = () => { learn.drawing = false; };
+  cv.onmousedown = down; cv.onmousemove = move; cv.onmouseup = up;
+  cv.ontouchstart = down; cv.ontouchmove = move; cv.ontouchend = up;
+
+  $("learn-add").onclick = addLearnSample;
+
+  $("dev-seg").querySelectorAll(".seg-btn").forEach((b) => {
+    b.onclick = () => {
+      $("dev-seg").querySelectorAll(".seg-btn").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active"); learn.dev = b.dataset.dev;
+      $("cuda-row").style.display = learn.dev === "gpu" ? "flex" : "none";
+    };
+  });
+  $("learn-start").onclick = startTraining;
+  $("train-apply").onclick = async () => { await afetch("/api/learn/apply", { method: "POST" }); toast("New model applied", "white"); };
+}
+
+function drawCanvas() {
+  const cv = $("learn-canvas"), ctx = cv.getContext("2d");
+  ctx.drawImage(learn.img, 0, 0, cv.width, cv.height);
+  if (learn.box) {
+    const b = learn.box;
+    ctx.strokeStyle = "#2f81f7"; ctx.lineWidth = 2;
+    ctx.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+    ctx.fillStyle = "rgba(47,129,247,0.15)";
+    ctx.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+  }
+}
+
+async function addLearnSample() {
+  const plate = $("learn-plate").value.trim();
+  if (!learn.file || !learn.box || !plate) { toast("Draw a box and type the plate"); return; }
+  const cv = $("learn-canvas");
+  const b = learn.box;
+  const x = Math.min(b.x0, b.x1) / cv.width, y = Math.min(b.y0, b.y1) / cv.height;
+  const w = Math.abs(b.x1 - b.x0) / cv.width, h = Math.abs(b.y1 - b.y0) / cv.height;
+  if (w < 0.02 || h < 0.02) { toast("Box too small"); return; }
+  const fd = new FormData();
+  fd.append("file", learn.file); fd.append("plate", plate);
+  fd.append("x", x); fd.append("y", y); fd.append("w", w); fd.append("h", h);
+  const r = await afetch("/api/learn/samples", { method: "POST", body: fd });
+  if (r.ok) {
+    toast("Sample added", "white");
+    $("learn-plate").value = ""; learn.box = null;
+    $("canvas-wrap").classList.add("hidden"); $("learn-file").value = "";
+    loadLearnSamples();
+  } else toast("Could not save sample");
+}
+
+async function loadLearnSamples() {
+  const { samples } = await api("/api/learn/samples");
+  $("sample-count").textContent = samples.length;
+  const grid = $("learn-samples"); grid.innerHTML = "";
+  samples.forEach((s) => {
+    const el = document.createElement("div");
+    el.className = "learn-samp";
+    el.innerHTML = `
+      <img src="${withToken("/learn-media/" + s.image_file)}" alt="" />
+      <div class="lab">${esc(s.plate_text)}</div>
+      <button class="del">✕</button>`;
+    el.querySelector(".del").onclick = async () => {
+      await afetch("/api/learn/samples/" + s.id, { method: "DELETE" });
+      loadLearnSamples();
+    };
+    grid.appendChild(el);
+  });
+  $("learn-empty").style.display = samples.length ? "none" : "block";
+}
+
+async function loadGpu() {
+  try {
+    const g = await api("/api/system/gpu");
+    const el = $("gpu-banner");
+    el.classList.toggle("has-gpu", g.has_gpu);
+    el.innerHTML = g.has_gpu
+      ? `🖥️ GPU: <b>${esc(g.name || "detected")}</b>${g.driver ? " · driver " + esc(g.driver) : ""} · ${g.cuda_available ? "CUDA ready" : "CUDA not installed"}`
+      : `💻 No GPU detected — training runs on CPU.`;
+  } catch (_) {}
+}
+
+async function startTraining() {
+  const epochs = parseInt($("learn-epochs").value) || 15;
+  const r = await afetch("/api/learn/train", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ epochs, device: learn.dev, install_cuda: $("learn-cuda").checked }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (r.ok) { toast("Training started", "white"); $("train-progress").classList.remove("hidden"); pollTraining(); }
+  else toast(d.detail || "Could not start training");
+}
+
+async function pollTraining() {
+  if (learn.poll) { clearInterval(learn.poll); learn.poll = null; }
+  const tick = async () => {
+    let s;
+    try { s = await api("/api/learn/status"); } catch (_) { return; }
+    if (!s || s.status === "idle") { $("train-progress").classList.add("hidden"); return; }
+    $("train-progress").classList.remove("hidden");
+    $("train-step").textContent = s.step || s.status;
+    $("train-pct").textContent = (s.progress || 0) + "%";
+    $("train-fill").style.width = (s.progress || 0) + "%";
+    $("train-device").textContent = "device: " + (s.device || "—");
+    $("train-acc").textContent = s.accuracy != null ? "accuracy: " + Math.round(s.accuracy * 100) + "%" : "";
+    $("train-log").textContent = (s.log || []).slice(-40).join("\n");
+    $("train-log").scrollTop = $("train-log").scrollHeight;
+    const done = s.status === "done" || s.status === "error";
+    $("train-apply").classList.toggle("hidden", s.status !== "done");
+    if (s.status === "error") toast(s.message || "Training failed");
+    if (done && learn.poll) { clearInterval(learn.poll); learn.poll = null; loadLearnSamples(); }
+  };
+  tick();
+  learn.poll = setInterval(tick, 2000);
 }
 document.querySelectorAll(".nav-btn").forEach((b) => (b.onclick = () => switchView(b.dataset.view)));
 

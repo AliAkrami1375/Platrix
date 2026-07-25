@@ -299,6 +299,13 @@ class MultiStreamManager:
     def pipeline(self) -> RecognitionPipeline:
         return self._probe
 
+    def reload_models(self) -> None:
+        """Rebuild the recognition pipeline so a freshly-trained model is used
+        for image recognition immediately (cameras apply on their next start)."""
+        self._probe = RecognitionPipeline(self.settings)
+        self._probe.warmup()
+        logger.info("Recognition models reloaded")
+
 
 def _idle_jpeg() -> bytes:
     img = np.full((360, 640, 3), (18, 22, 30), dtype="uint8")
