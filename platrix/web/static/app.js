@@ -2,7 +2,19 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const api = (path, opts) => fetch(path, opts).then((r) => r.json());
+
+// All API calls carry the session token as a Bearer header (token-based API).
+const TOKEN_KEY = "platrix_token";
+const getToken = () => localStorage.getItem(TOKEN_KEY) || "";
+function afetch(url, opts = {}) {
+  const headers = Object.assign({}, opts.headers);
+  const t = getToken();
+  if (t) headers["Authorization"] = "Bearer " + t;
+  return fetch(url, Object.assign({}, opts, { headers }));
+}
+const api = (path, opts) => afetch(path, opts).then((r) => r.json());
+// Append the token to <img> URLs (stream / snapshots can't send headers).
+const withToken = (url) => url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(getToken());
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -26,7 +38,7 @@ function fmtTime(iso) {
 function snapUrl(path) {
   if (!path) return null;
   const i = path.indexOf("snapshots/");
-  return i >= 0 ? "/" + path.slice(i) : null;
+  return i >= 0 ? withToken("/" + path.slice(i)) : null;
 }
 function toast(msg, kind = "black") {
   const el = $("toast");
@@ -96,7 +108,7 @@ function addDetectCard(ev) {
   const add = async (list) => {
     const plate = plateIn.value.trim();
     if (!plate) { toast("Enter a plate number first"); return; }
-    const r = await fetch("/api/watchlist", {
+    const r = await afetch("/api/watchlist", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plate, name: nameIn.value.trim(), list_type: list }),
     });
@@ -143,7 +155,7 @@ $("btn-test-cam").onclick = async () => {
 
 $("btn-save-cam").onclick = async () => {
   const url = $("cam-url").value.trim();
-  const r = await fetch("/api/cameras", {
+  const r = await afetch("/api/cameras", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: $("cam-name").value.trim(), url, direction: state.camDir }),
   });
@@ -182,7 +194,7 @@ function cameraRow(c) {
     </button>`;
   row.querySelector(".cam-play").onclick = () => startCamera(c);
   row.querySelector(".row-del").onclick = async () => {
-    await fetch("/api/cameras/" + c.id, { method: "DELETE" });
+    await afetch("/api/cameras/" + c.id, { method: "DELETE" });
     loadCameras();
   };
   return row;
@@ -193,7 +205,7 @@ async function startCamera(c) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ source: c.url, direction: c.direction }),
   });
-  $("live").src = "/api/stream/mjpeg?t=" + Date.now();
+  $("live").src = withToken("/api/stream/mjpeg?t=" + Date.now());
   $("stream-current").textContent = `Viewing: ${c.name}`;
   refreshStatus();
 }
@@ -234,7 +246,7 @@ $("watch-search").addEventListener("input", (e) => { state.watchSearch = e.targe
 $("btn-add-watch").onclick = async () => {
   const plate = $("watch-plate").value.trim();
   if (!plate) { toast("Enter a plate number"); return; }
-  const r = await fetch("/api/watchlist", {
+  const r = await afetch("/api/watchlist", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ plate, name: $("watch-name").value.trim(), list_type: state.watchList }),
   });
@@ -275,7 +287,7 @@ function watchRow(e) {
       <svg viewBox="0 0 24 24" class="ic-s"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6"/></svg>
     </button>`;
   row.querySelector(".row-del").onclick = async () => {
-    await fetch("/api/watchlist/" + e.id, { method: "DELETE" });
+    await afetch("/api/watchlist/" + e.id, { method: "DELETE" });
     loadWatchlist();
   };
   return row;
@@ -397,18 +409,22 @@ async function initGate() {
   $("gate-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     $("gate-error").textContent = "";
-    const r = await fetch("/api/login", {
+    const r = await afetch("/api/login", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: $("gate-user").value.trim(), password: $("gate-pass").value }),
     });
-    if (r.ok) { gate.classList.add("hidden"); startApp(); }
-    else $("gate-error").textContent = "Invalid username or password.";
+    if (r.ok) {
+      const d = await r.json();
+      if (d.token) localStorage.setItem(TOKEN_KEY, d.token);
+      gate.classList.add("hidden"); startApp();
+    } else $("gate-error").textContent = "Invalid username or password.";
   });
 }
 
 const _logout = $("btn-logout");
 if (_logout) _logout.onclick = async () => {
-  await fetch("/api/logout", { method: "POST" });
+  await afetch("/api/logout", { method: "POST" });
+  localStorage.removeItem(TOKEN_KEY);
   location.reload();
 };
 
@@ -424,11 +440,12 @@ if ($("btn-save-creds")) $("btn-save-creds").onclick = async () => {
     current_password: $("set-cur").value,
     new_password: $("set-new").value,
   };
-  const r = await fetch("/api/account/password", {
+  const r = await afetch("/api/account/password", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
   const d = await r.json().catch(() => ({}));
   if (r.ok) {
+    if (d.token) localStorage.setItem(TOKEN_KEY, d.token);  // username may have changed
     $("creds-msg").textContent = "Credentials updated ✓";
     $("set-cur").value = ""; $("set-new").value = "";
     toast("Credentials updated", "white");
@@ -451,7 +468,7 @@ async function loadTokens() {
         <svg viewBox="0 0 24 24" class="ic-s"><polyline points="3 6 5 6 21 6"/><path d="M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6"/></svg>
       </button>`;
     row.querySelector(".row-del").onclick = async () => {
-      await fetch("/api/tokens/" + t.id, { method: "DELETE" });
+      await afetch("/api/tokens/" + t.id, { method: "DELETE" });
       loadTokens();
     };
     list.appendChild(row);
@@ -460,7 +477,7 @@ async function loadTokens() {
 }
 
 if ($("btn-create-token")) $("btn-create-token").onclick = async () => {
-  const r = await fetch("/api/tokens", {
+  const r = await afetch("/api/tokens", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: $("tok-name").value.trim() || "token" }),
   });

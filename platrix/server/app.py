@@ -148,18 +148,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return username == db_user and auth.verify_password(password, db_hash)
         return auth.check_credentials(settings, username, password)
 
+    def _bearer(request: Request) -> str | None:
+        header = request.headers.get("authorization", "")
+        return header[7:].strip() if header.startswith("Bearer ") else None
+
     def _current_user(request: Request) -> str | None:
+        """Username from a Bearer session token or the login cookie."""
+        tok = _bearer(request)
+        if tok:
+            user = auth.verify_token(tok, settings.secret_key)
+            if user:
+                return user
         return auth.verify_token(request.cookies.get(auth.COOKIE_NAME), settings.secret_key)
+
+    def _authorized(request: Request) -> bool:
+        # Primary: a Bearer token in the header (dashboard session token OR an
+        # API access token). This is what makes the API token-managed.
+        tok = _bearer(request)
+        if tok and (
+            auth.verify_token(tok, settings.secret_key) is not None
+            or store.verify_api_token(tok)
+        ):
+            return True
+        # Browser <img> requests (MJPEG stream / snapshots) can't send headers,
+        # so those two paths also accept the cookie or a ?token= query param.
+        path = request.url.path
+        if path.startswith("/api/stream/mjpeg") or path.startswith("/snapshots"):
+            if auth.verify_token(request.cookies.get(auth.COOKIE_NAME), settings.secret_key):
+                return True
+            qt = request.query_params.get("token")
+            if qt and (auth.verify_token(qt, settings.secret_key) or store.verify_api_token(qt)):
+                return True
+        return False
 
     @app.middleware("http")
     async def require_auth(request: Request, call_next):
         if settings.auth_enabled and not auth.is_public_path(request.url.path):
-            ok = _current_user(request) is not None
-            if not ok:  # allow programmatic access via a Bearer API token
-                header = request.headers.get("authorization", "")
-                if header.startswith("Bearer "):
-                    ok = store.verify_api_token(header[7:].strip())
-            if not ok:
+            if not _authorized(request):
                 return JSONResponse({"detail": "Authentication required"}, status_code=401)
         return await call_next(request)
 
@@ -169,7 +194,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not _valid_login(req.username, req.password):
             raise HTTPException(status_code=401, detail="Invalid username or password")
         token = auth.make_token(req.username, settings.secret_key)
-        resp = JSONResponse({"ok": True, "username": req.username})
+        # Return the token (the dashboard sends it as a Bearer header) and also
+        # set a cookie (only used by the browser's <img> stream / snapshots).
+        resp = JSONResponse({"ok": True, "username": req.username, "token": token})
         resp.set_cookie(
             auth.COOKIE_NAME, token, httponly=True, samesite="lax", max_age=7 * 24 * 3600
         )
@@ -198,7 +225,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
         store.set_credentials(new_user, req.new_password)
         token = auth.make_token(new_user, settings.secret_key)
-        resp = JSONResponse({"ok": True, "username": new_user})
+        resp = JSONResponse({"ok": True, "username": new_user, "token": token})
         resp.set_cookie(
             auth.COOKIE_NAME, token, httponly=True, samesite="lax", max_age=7 * 24 * 3600
         )
