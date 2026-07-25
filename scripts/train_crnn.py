@@ -42,7 +42,17 @@ _CODE_TO_PERSIAN = {
 
 
 def parse_label(stem: str) -> list[str] | None:
-    """`'123_32-Y-528-86'` -> ['3','2','ی','5','2','8','8','6']."""
+    """Parse a plate label from the image filename.
+
+    Two formats are supported:
+      * generator:  ``'123_32-Y-528-86'`` -> ['3','2','ی','5','2','8','8','6']
+      * direct:     ``'123__32ب34567'``   -> ['3','2','ب','3','4','5','6','7']
+        (everything after '__' is the literal Persian plate string)
+    """
+    if "__" in stem:
+        plate = stem.split("__", 1)[1]
+        seq = [c for c in plate if c.strip()]
+        return seq or None
     if "_" not in stem:
         return None
     parts = stem.split("_", 1)[1].split("-")

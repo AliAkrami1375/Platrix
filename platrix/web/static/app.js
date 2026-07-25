@@ -157,7 +157,7 @@ async function loadLearnSamples() {
     el.innerHTML = `
       <img src="${withToken("/learn-media/" + s.image_file)}" alt="" />
       <div class="lab">${esc(s.plate_text)}</div>
-      <button class="del">✕</button>`;
+      <button class="del" title="Remove"><svg viewBox="0 0 24 24" class="ic-s"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
     el.querySelector(".del").onclick = async () => {
       await afetch("/api/learn/samples/" + s.id, { method: "DELETE" });
       loadLearnSamples();
@@ -172,9 +172,10 @@ async function loadGpu() {
     const g = await api("/api/system/gpu");
     const el = $("gpu-banner");
     el.classList.toggle("has-gpu", g.has_gpu);
+    const chip = `<svg viewBox="0 0 24 24" class="ic-s" style="vertical-align:-3px"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg>`;
     el.innerHTML = g.has_gpu
-      ? `🖥️ GPU: <b>${esc(g.name || "detected")}</b>${g.driver ? " · driver " + esc(g.driver) : ""} · ${g.cuda_available ? "CUDA ready" : "CUDA not installed"}`
-      : `💻 No GPU detected — training runs on CPU.`;
+      ? `${chip} GPU: <b>${esc(g.name || "detected")}</b>${g.driver ? " · driver " + esc(g.driver) : ""} · ${g.cuda_available ? "CUDA ready" : "CUDA not installed"}`
+      : `${chip} No GPU detected — training runs on CPU.`;
   } catch (_) {}
 }
 
@@ -200,7 +201,9 @@ async function pollTraining() {
     $("train-pct").textContent = (s.progress || 0) + "%";
     $("train-fill").style.width = (s.progress || 0) + "%";
     $("train-device").textContent = "device: " + (s.device || "—");
-    $("train-acc").textContent = s.accuracy != null ? "accuracy: " + Math.round(s.accuracy * 100) + "%" : "";
+    $("train-epoch").textContent = s.epochs ? `epoch ${s.epoch || 0}/${s.epochs}` : "preparing";
+    $("train-acc").textContent = s.accuracy != null ? "accuracy " + Math.round(s.accuracy * 100) + "%" : "";
+    $("train-acc").style.display = s.accuracy != null ? "" : "none";
     $("train-log").textContent = (s.log || []).slice(-40).join("\n");
     $("train-log").scrollTop = $("train-log").scrollHeight;
     const done = s.status === "done" || s.status === "error";
