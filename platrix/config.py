@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     # --- Detection -------------------------------------------------------
     detector: str = "auto"  # "auto" | "contour" | "yolo"
     yolo_weights: Path = BASE_DIR / "models" / "plate_yolo.pt"
+    # Secondary detector: only runs when the primary finds nothing. Trained on
+    # hard real surveillance frames (grayscale / dim / small / truck plates) to
+    # recover plates the primary is blind to, without regressing the easy cases.
+    yolo_fallback_weights: Path = BASE_DIR / "models" / "plate_yolo_fallback.onnx"
+    yolo_fallback_size: int = 640
     detection_confidence: float = 0.5  # ignore weak / non-plate detections
     min_plate_area: int = 1000
     plate_aspect_min: float = 2.2

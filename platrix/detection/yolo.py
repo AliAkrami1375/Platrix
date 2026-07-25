@@ -33,6 +33,9 @@ class YoloDetector(PlateDetector):
         self._input_name = "images"
         self._ultra = None  # ultralytics fallback model
         self._tried = False
+        # Secondary ONNX detector for hard frames (loaded lazily if present).
+        self._fallback_session = None
+        self._fallback_input = "images"
 
     def warmup(self) -> None:
         self._load()
@@ -59,6 +62,7 @@ class YoloDetector(PlateDetector):
                 )
                 self._input_name = self._session.get_inputs()[0].name
                 logger.info("Loaded YOLO ONNX detector from %s", onnx)
+                self._load_fallback()
                 return
             except ImportError:
                 logger.warning("onnxruntime missing; trying ultralytics .pt")
@@ -75,19 +79,44 @@ class YoloDetector(PlateDetector):
         self._ultra = YOLO(str(weights))
         logger.info("Loaded YOLO (ultralytics) detector from %s", weights)
 
+    def _load_fallback(self):
+        """Load the optional secondary ONNX detector, if the file exists."""
+        path = getattr(self.settings, "yolo_fallback_weights", None)
+        if not path or not path.exists():
+            return
+        try:
+            import onnxruntime as ort
+
+            self._fallback_session = ort.InferenceSession(
+                str(path), providers=["CPUExecutionProvider"]
+            )
+            self._fallback_input = self._fallback_session.get_inputs()[0].name
+            logger.info("Loaded YOLO fallback detector from %s", path)
+        except Exception as exc:  # pragma: no cover - fallback is best-effort
+            logger.warning("Could not load YOLO fallback detector: %s", exc)
+
     # -- inference --------------------------------------------------------
     def detect(self, frame: Frame) -> list[PlateDetection]:
         self._load()
         if self._session is not None:
-            return self._detect_onnx(frame)
+            dets = self._detect_onnx(frame, self._session, self._input_name, self.infer_size)
+            # Only pay for the second pass when the primary finds nothing.
+            if not dets and self._fallback_session is not None:
+                dets = self._detect_onnx(
+                    frame,
+                    self._fallback_session,
+                    self._fallback_input,
+                    self.settings.yolo_fallback_size,
+                )
+            return dets
         return self._detect_ultra(frame)
 
-    def _detect_onnx(self, frame: Frame) -> list[PlateDetection]:
+    def _detect_onnx(self, frame: Frame, session, input_name, size) -> list[PlateDetection]:
         image = frame.image
         h0, w0 = image.shape[:2]
-        blob, ratio, (dw, dh) = _letterbox(image, self.infer_size)
+        blob, ratio, (dw, dh) = _letterbox(image, size)
         inp = blob[None].astype("float32")
-        out = self._session.run(None, {self._input_name: inp})[0]
+        out = session.run(None, {input_name: inp})[0]
 
         # YOLOv8 output: (1, 4+nc, N) -> (N, 4+nc). One class here.
         preds = np.squeeze(out, 0).T  # (N, 5)
