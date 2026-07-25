@@ -97,12 +97,15 @@ def composite(plate_bgr, boxes, bgs, rng):
     return scene, new_boxes
 
 
-def make_dataset(plates_root: Path, out: Path, bg_dir: Path | None, seed: int):
+def make_dataset(plates_root: Path, out: Path, bg_dir: Path | None, seed: int, max_plates: int = 0):
     rng = random.Random(seed)
     np_rng = np.random.RandomState(seed)
     bgs = _backgrounds(bg_dir)
     imgs = sorted(glob.glob(str(plates_root / "images" / "*.png")))
-    print(f"compositing {len(imgs)} plates onto scenes ({len(bgs)} backgrounds)")
+    if max_plates and len(imgs) > max_plates:
+        rng.shuffle(imgs)
+        imgs = imgs[:max_plates]
+    print(f"compositing {len(imgs)} plates onto scenes ({len(bgs)} backgrounds)", flush=True)
 
     for subset, sl in (("train", slice(0, int(len(imgs) * 0.92))),
                        ("val", slice(int(len(imgs) * 0.92), None))):
@@ -147,6 +150,7 @@ def main() -> None:
     ap.add_argument("--epochs", type=int, default=40)
     ap.add_argument("--imgsz", type=int, default=416)
     ap.add_argument("--batch", type=int, default=16)
+    ap.add_argument("--max-plates", type=int, default=0, help="Subsample N plates (0 = all)")
     ap.add_argument("--seed", type=int, default=1)
     args = ap.parse_args()
 
@@ -155,7 +159,7 @@ def main() -> None:
     from ultralytics import YOLO
 
     work = Path(args.work)
-    names = make_dataset(Path(args.plates), work, Path(args.backgrounds), args.seed)
+    names = make_dataset(Path(args.plates), work, Path(args.backgrounds), args.seed, args.max_plates)
 
     model = YOLO("yolov8n.pt")
     model.train(
