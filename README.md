@@ -10,7 +10,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED)](docker-compose.yml)
-[![Model on Hugging Face](https://img.shields.io/badge/🤗%20Model-Dibachain%2Focr--persian-yellow)](https://huggingface.co/Dibachain/ocr-persian)
+[![Model on Hugging Face](https://img.shields.io/badge/🤗%20Model-Dibachain%2FPlatrix-yellow)](https://huggingface.co/Dibachain/Platrix)
 
 **English** · [فارسی](README.fa.md)
 
@@ -98,7 +98,7 @@ cd Platrix
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt && pip install -e .
 
-huggingface-cli download Dibachain/ocr-persian \
+huggingface-cli download Dibachain/Platrix \
     ocr_crnn.onnx ocr_crnn.labels.json plate_yolo.onnx --local-dir models/
 
 platrix serve                 # dashboard on http://localhost:8080
@@ -204,22 +204,46 @@ file — see [`.env.example`](.env.example)):
 
 ## 📦 Models
 
-The trained models live on Hugging Face (not committed to this repo):
+The trained models are hosted on Hugging Face (not committed to this repo):
 
-**➜ https://huggingface.co/Dibachain/ocr-persian**
+**➜ https://huggingface.co/Dibachain/Platrix**
+
+### Download them
 
 ```bash
-huggingface-cli download Dibachain/ocr-persian \
-    ocr_crnn.onnx ocr_crnn.labels.json plate_yolo.onnx --local-dir models/
+# Option 1 — Hugging Face CLI (recommended)
+pip install -U "huggingface_hub[cli]"
+huggingface-cli download Dibachain/Platrix \
+    plate_yolo.onnx ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json \
+    --local-dir models/
+
+# Option 2 — plain download, no extra tools
+base=https://huggingface.co/Dibachain/Platrix/resolve/main
+for f in plate_yolo.onnx ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json; do
+    curl -L "$base/$f" -o "models/$f"
+done
 ```
 
 | File | Role |
 |------|------|
 | `plate_yolo.onnx` | YOLO plate **detector** |
 | `ocr_crnn.onnx` (+ `.labels.json`) | Whole-plate **CRNN reader** (recommended) |
+| `ocr_cnn.onnx` (+ `.labels.json`) | Per-character classifier (lightweight fallback) |
 
 Until models are in place, Platrix runs in detection-only mode (still logs
 snapshots + timestamps) and you can label plates by hand in the dashboard.
+
+### Try it on the sample images
+
+The [`img-test/`](img-test/) folder ships a few real plate photos (also mirrored
+on Hugging Face under `img-test/`) so you can verify recognition immediately:
+
+```bash
+curl -H "Authorization: Bearer pltx_xxx" \
+     -F "file=@img-test/sample-01.jpg" http://localhost:8080/api/recognize
+```
+
+Or just drop one into the **Image Detection** tab.
 
 ### Training
 

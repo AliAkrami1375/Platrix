@@ -10,7 +10,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED)](docker-compose.yml)
-[![Model on Hugging Face](https://img.shields.io/badge/🤗%20Model-Dibachain%2Focr--persian-yellow)](https://huggingface.co/Dibachain/ocr-persian)
+[![Model on Hugging Face](https://img.shields.io/badge/🤗%20Model-Dibachain%2FPlatrix-yellow)](https://huggingface.co/Dibachain/Platrix)
 
 [English](README.md) · **فارسی**
 
@@ -99,7 +99,7 @@ cd Platrix
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt && pip install -e .
 
-huggingface-cli download Dibachain/ocr-persian \
+huggingface-cli download Dibachain/Platrix \
     ocr_crnn.onnx ocr_crnn.labels.json plate_yolo.onnx --local-dir models/
 
 platrix serve                 # داشبورد روی http://localhost:8080
@@ -181,13 +181,24 @@ curl -H "Authorization: Bearer pltx_xxx" \
 
 مدل‌های آموزش‌دیده روی Hugging Face هستند (در این ریپو قرار ندارند):
 
-**➜ https://huggingface.co/Dibachain/ocr-persian**
+**➜ https://huggingface.co/Dibachain/Platrix**
+
+### دانلود مدل‌ها
 
 </div>
 
 ```bash
-huggingface-cli download Dibachain/ocr-persian \
-    ocr_crnn.onnx ocr_crnn.labels.json plate_yolo.onnx --local-dir models/
+# روش ۱ — با ابزار Hugging Face (پیشنهادی)
+pip install -U "huggingface_hub[cli]"
+huggingface-cli download Dibachain/Platrix \
+    plate_yolo.onnx ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json \
+    --local-dir models/
+
+# روش ۲ — دانلود ساده، بدون ابزار اضافه
+base=https://huggingface.co/Dibachain/Platrix/resolve/main
+for f in plate_yolo.onnx ocr_crnn.onnx ocr_crnn.labels.json ocr_cnn.onnx ocr_cnn.labels.json; do
+    curl -L "$base/$f" -o "models/$f"
+done
 ```
 
 <div dir="rtl">
@@ -198,6 +209,16 @@ huggingface-cli download Dibachain/ocr-persian \
 
 تا زمانی که مدلی نباشد، پلاتریکس در حالت «فقط‌تشخیص» کار می‌کند و همچنان پلاک‌ها و
 Snapshotها را ثبت می‌کند؛ می‌توانی در داشبورد پلاک را دستی لیبل بزنی.
+
+### تصاویر تست
+
+پوشهٔ [`img-test/`](img-test/) چند عکس واقعی پلاک دارد (روی Hugging Face هم زیر
+`img-test/` هست) تا فوری تشخیص را امتحان کنی — در تب **Image Detection** یا با API:
+
+```bash
+curl -H "Authorization: Bearer pltx_xxx" \
+     -F "file=@img-test/sample-01.jpg" http://localhost:8080/api/recognize
+```
 
 ---
 
