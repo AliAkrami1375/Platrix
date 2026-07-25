@@ -99,11 +99,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         manager.stop()
 
     app = FastAPI(
-        title="Platrix",
+        title="Platrix API",
         version=__version__,
-        description="Real-time Iranian license plate recognition engine.",
+        description=(
+            "Real-time Iranian license plate recognition (ALPR) engine.\n\n"
+            "**Authentication is token-based.** Create an API token in the "
+            "dashboard (**Settings → API access tokens**), click **Authorize** "
+            "above, and paste it. All requests then send "
+            "`Authorization: Bearer <token>`.\n\n"
+            "```bash\n"
+            "curl -H 'Authorization: Bearer pltx_xxx' \\\n"
+            "     -F 'file=@car.jpg' http://<host>/api/recognize\n"
+            "```"
+        ),
         lifespan=lifespan,
     )
+
+    def custom_openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+        from fastapi.openapi.utils import get_openapi
+
+        schema = get_openapi(
+            title=app.title, version=app.version,
+            description=app.description, routes=app.routes,
+        )
+        schema.setdefault("components", {})["securitySchemes"] = {
+            "BearerAuth": {
+                "type": "http", "scheme": "bearer",
+                "description": "An API token from Settings → API access tokens.",
+            }
+        }
+        schema["security"] = [{"BearerAuth": []}]
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = custom_openapi
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
