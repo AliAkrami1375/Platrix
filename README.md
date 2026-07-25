@@ -4,7 +4,7 @@
 
 # ▣ Platrix
 
-### Real-time, self-hosted Automatic License Plate Recognition (ALPR) for Iranian plates
+### Real-time, self-hosted license-plate **surveillance** for Iranian plates
 
 [![CI](https://github.com/AliAkrami1375/Platrix/actions/workflows/ci.yml/badge.svg)](https://github.com/AliAkrami1375/Platrix/actions)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -14,63 +14,65 @@
 
 **English** · [فارسی](README.fa.md)
 
-Detect and read Iranian vehicle license plates from **images**, **video files**,
-**webcams** and **online (RTSP/HTTP) cameras** — in real time — with a built-in
-web dashboard, a REST + WebSocket API, and a searchable, timestamped log of every
-plate it sees.
+Platrix turns any set of cameras into an **always-on license-plate monitoring
+system**. It detects and reads Iranian plates in real time from **images**,
+**video files**, **webcams** and **online RTSP/HTTP cameras**, logs every read
+with a timestamp and a cropped snapshot, matches plates against **white / black
+lists**, and lets you **teach it new plates from your own photos** — all from a
+self-hosted web dashboard with a token-secured REST + WebSocket API. No cloud,
+no third-party calls: your footage and data never leave your server.
 
 </div>
 
 ---
 
-## ✨ Highlights
+## ✨ What it does
 
 | | |
 |---|---|
-| 🎥 **Any source** | Webcam, RTSP/HTTP IP cameras, video files, or single images — auto-detected from one string |
-| ⚡ **Real-time pipeline** | Threaded capture → detect → OCR → persist, with frame-striding, FPS throttling and duplicate suppression |
-| 🧠 **Pluggable engines** | Detection: classic **contour** (zero weights, works instantly) or **YOLO**. OCR: **CNN** or none |
-| 🛡️ **Watchlists** | Register named plates on a **whitelist** or **blacklist**; matches are flagged and alerted live |
-| 🚦 **Entry / exit** | Tag a source as an **entry** or **exit** lane; every read is logged with its direction |
-| 🔎 **Searchable log** | Filter detections by plate, direction, or whitelist/blacklist right from the app |
-| 🗄️ **Full audit trail** | Every read stored in SQLite with UTC timestamp, confidence, source and a cropped **snapshot** image |
-| 📱 **Mobile-app dashboard** | Responsive PWA-style UI with bottom navigation — Live, Events, Watchlist and Stats |
-| 🔌 **Clean API** | REST endpoints + a WebSocket event stream for integration with your own systems |
-| 📦 **Self-hosted** | One `docker compose up`, or `pip install` and run. No cloud, no external calls — your data stays yours |
+| 🛰️ **Always-on surveillance** | Add many cameras, flip each to **always-on**; they auto-start on boot, auto-reconnect, and run concurrently with a live per-camera connection status |
+| 🌐 **Any source, any network** | Webcam, RTSP/HTTP IP cameras, video files or single images — drop Platrix onto any network and point it at your cameras |
+| ⚡ **Real-time deep pipeline** | YOLO plate **detector** → image-quality **enhancement** → segmentation-free **CRNN reader**, all via ONNX Runtime; frame-striding, FPS throttling and duplicate suppression |
+| 🎯 **Accurate on real photos** | The reader is trained on **real Iranian plate characters** and reads the whole plate at once — no fragile character splitting |
+| 🛡️ **Watchlists & alerts** | Register named plates on a **whitelist** or **blacklist**; matches are flagged and alerted live |
+| 🚦 **Entry / exit lanes** | Tag a camera as an **entry** or **exit**; every read is logged with its direction |
+| 🔎 **Searchable log + CSV export** | Filter detections by plate, direction, list or **date range**, and export the results to CSV |
+| 🧠 **Learn / train in the browser** | Upload photos, draw a box around the plate, type the plate, and **train the model in the background** — with live progress that survives a page refresh, and optional GPU |
+| 🔐 **Secure by default** | Login with a username/password you can change from the UI, plus **API access tokens** for programmatic use; interactive **API docs** at `/docs` |
+| 📱 **Responsive dashboard** | Desktop sidebar app on the big screen, mobile app with bottom navigation on phones |
+| 📦 **Truly self-hosted** | One `docker compose up`, or `pip install` and run |
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ How it works
 
 ```
-                       ┌──────────────────────────────────────────────┐
-                       │                  Platrix                      │
-                       │                                               │
-  Webcam / RTSP  ─────▶│  Source  ─▶  Pipeline  ─▶  Storage  ─▶  SQLite │
-  Video / Image        │  (cv2)      detect+OCR     +snapshots          │
-                       │                │                               │
-                       │                ▼                               │
-                       │   FastAPI  ──  MJPEG stream · REST · WebSocket │
-                       └───────────────────────┬──────────────────────┘
-                                                │
-                                        Web dashboard / clients
+                         ┌──────────────────────────────────────────────┐
+  Cameras (RTSP/HTTP) ──▶│  Multi-camera manager                        │
+  Webcams / files        │   └─ per camera: read ─▶ detect ─▶ enhance ─▶ │
+  Uploaded images        │                          read ─▶ persist      │
+                         │                                               │
+                         │  FastAPI · token auth · REST · WebSocket ·    │
+                         │  MJPEG streams · SQLite + snapshots           │
+                         └───────────────────────┬──────────────────────┘
+                                                 │
+                              Web dashboard · API clients · CSV export
 ```
 
-The recognition flow has three swappable stages:
+The recognition pipeline has three stages, each a portable ONNX model run with
+**ONNX Runtime** (no PyTorch/TensorFlow needed to *run* Platrix):
 
-1. **Detection** — locate the plate region.
-   - `yolo` — a YOLOv8 plate detector run through **ONNX Runtime** (no PyTorch needed at serve time). Robust on real photos under angle, motion and clutter; this is what makes end-to-end reading work on real images.
-   - `contour` — a **weights-free** classic fallback combining a morphological text-region search (black-hat → gradient → wide close) with an edge/polygon finder, scored and NMS-ranked. Runs with no model at all.
-   - `auto` *(default)* — uses `yolo` when a detector model is present, otherwise `contour`.
-2. **OCR — read the plate.**
-   - `crnn` *(recommended)* — a **segmentation-free** CRNN+CTC model that reads the whole plate in one pass through **ONNX Runtime**. No character splitting, so no split/merge errors — the most accurate option on real photos. Trained on realistic full-plate images (official font + augmentation).
-   - `onnx` — a per-character path: an enhancement + projection segmenter feeds a CNN classifier, with plate-grammar decoding and TTA. A fallback when no CRNN model is present.
-   - `cnn` — the per-character idea via a Keras/TensorFlow model.
-   - `none` — detection-only mode (still logs snapshots and timestamps).
-   - `auto` *(default)* — uses `crnn` when its model is present, else `onnx`, else `none`.
+1. **Detect** — a YOLOv8 model locates the plate in the frame. Weak / non-plate
+   detections are ignored, so clutter doesn't produce false reads.
+2. **Enhance** — the plate crop is upscaled, denoised, contrast-corrected and
+   sharpened. The *same* enhancement is applied during training, so there is no
+   train/serve mismatch (this is what makes the enhancement actually help).
+3. **Read** — a segmentation-free **CRNN + CTC** model reads the entire plate at
+   once and outputs the standard layout `DD L DDD DD`
+   (two digits · letter · three digits · two-digit region), e.g. `۸۱ و ۶۳۸ ۱۳`.
 
-   A shared **enhancement layer** ([`platrix/preprocessing.py`](platrix/preprocessing.py)) upscales, denoises, contrast-corrects and sharpens the plate crop before OCR.
-3. **Persistence** — de-duplicated readings are written to SQLite with a cropped JPEG snapshot per event.
+A weights-free classic detector and a per-character OCR are included as
+fallbacks; `auto` selects the best available.
 
 ---
 
@@ -81,10 +83,12 @@ The recognition flow has three swappable stages:
 ```bash
 git clone https://github.com/AliAkrami1375/Platrix.git
 cd Platrix
+# fetch the trained models (see "Models" below)
 docker compose up --build
 ```
 
-Open **http://localhost:8080**. Data and snapshots persist in `./data`.
+Open **http://localhost:8080** and sign in (default `admin` / `admin` — change it
+in **Settings**). Data, snapshots and the database persist in `./data`.
 
 ### Option B — Local Python
 
@@ -92,81 +96,89 @@ Open **http://localhost:8080**. Data and snapshots persist in `./data`.
 git clone https://github.com/AliAkrami1375/Platrix.git
 cd Platrix
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-pip install -e .
+pip install -r requirements.txt && pip install -e .
+
+huggingface-cli download Dibachain/ocr-persian \
+    ocr_crnn.onnx ocr_crnn.labels.json plate_yolo.onnx --local-dir models/
 
 platrix serve                 # dashboard on http://localhost:8080
 ```
 
-> The default `contour` detector needs no weights. For CNN OCR or YOLO, also
-> install the ML extras: `pip install -r requirements-ml.txt`.
+> Running Platrix needs only the lightweight `requirements.txt` (ONNX Runtime).
+> **Training** (the Learn tab / scripts) additionally needs PyTorch — see below.
 
 ---
 
-## 💻 Usage
+## 🎥 Using Platrix as a surveillance system
 
-### Web dashboard
-
-`platrix serve` launches the dashboard where you can:
-
-- paste a **source** (`0`, `rtsp://user:pass@host/stream`, `/path/video.mp4`) and hit **Start** to watch the live annotated feed;
-- **drag in an image** to recognize a plate on the spot;
-- watch the **detection table** populate live over WebSocket, with snapshots.
-
-### Command line
-
-```bash
-platrix run 0                       # default webcam
-platrix run rtsp://cam.local/stream # network camera
-platrix run drive.mp4 --show        # video file, with a preview window
-platrix run car.jpg                 # a single image
-platrix events --limit 20           # print the latest detections
-platrix events --plate 12B          # search the log
-```
-
-### Auto-start a camera on boot
-
-```bash
-PLATRIX_DEFAULT_SOURCE="rtsp://user:pass@192.168.1.50:554/stream" platrix serve
-```
+1. **Video Stream** tab → **Add a camera**: give it a name, paste the stream URL
+   (`rtsp://user:pass@host:554/stream`, an HTTP MJPEG URL, or `0` for a webcam),
+   and pick a lane direction. **Test** grabs a preview frame to confirm the link.
+2. Flip the camera's **always-on** switch. It now runs continuously, reconnects
+   itself if the network drops, and **auto-starts whenever the server boots**.
+   The status dot shows `online / reconnecting / error` and its live FPS.
+3. Add as many cameras as you need — they run **concurrently**. Every plate is
+   logged with the camera's name, direction, confidence, timestamp and a
+   cropped snapshot.
+4. Watch the live annotated feed, search the **Detections** history (by plate,
+   direction, list or date range), and **export to CSV** for reporting.
 
 ---
 
-## 🔌 API
+## 🧠 Teach it new plates (Learn / Train)
+
+The **Learn** tab lets anyone improve the model without touching the code:
+
+1. **Annotate** — upload a photo, drag a box around the plate on the canvas, and
+   type the plate exactly.
+2. **Build a dataset** — your labelled samples are stored server-side.
+3. **Train** — choose the compute device (**Auto / CPU / GPU**; GPU is opt-in and
+   can install a CUDA build of PyTorch if you allow it), then **Start training**.
+   The job runs **in the background as a detached process**, so it keeps going
+   even if you refresh or close the tab. Live progress (step, %, epoch, accuracy
+   and a log) is shown and resumes on reload.
+4. **Apply** — one click hot-swaps the freshly trained model into recognition.
+
+> GPU drivers are **detected and used** when present; Platrix never force-installs
+> drivers on your host. `GET /api/system/gpu` reports what was found.
+
+---
+
+## 🔐 Security & API
+
+- **Login** with a username/password, changeable from **Settings**
+  (PBKDF2-hashed, stored in the DB). Set `PLATRIX_AUTH_PASSWORD` /
+  `PLATRIX_SECRET_KEY` for production.
+- **The API is token-based.** Create named **API tokens** in Settings and call
+  the API with `Authorization: Bearer <token>`. The login cookie only authorizes
+  the browser's own MJPEG/snapshot `<img>` requests.
+- **Interactive API docs** (Swagger UI) at **`/docs`** — click *Authorize*, paste
+  a token, and try every endpoint. Great for integrating or presenting the API.
+
+```bash
+# Recognize an uploaded image with an API token
+curl -H "Authorization: Bearer pltx_xxx" \
+     -F "file=@car.jpg" http://localhost:8080/api/recognize
+```
+
+### REST / WebSocket reference
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET`  | `/api/health` | Liveness + version |
-| `GET`  | `/api/status` | Stream state, FPS, engines, stats |
-| `POST` | `/api/stream/start` | `{ "source": "0", "loop": false }` — start a live source |
-| `POST` | `/api/stream/stop` | Stop the active source |
-| `GET`  | `/api/stream/mjpeg` | Annotated MJPEG video stream |
-| `POST` | `/api/recognize` | Multipart image upload → detected plates + annotated preview |
-| `GET`  | `/api/events?limit=&plate=&direction=&list_type=&date_from=&date_to=` | Search the detection log (with date range) |
-| `GET`  | `/api/stats` | Aggregate statistics |
-| `GET`  | `/api/watchlist?list_type=` | List watchlisted plates |
-| `POST` | `/api/watchlist` | Add a named plate — `{ "plate", "name", "list_type": "white"\|"black" }` |
-| `DELETE` | `/api/watchlist/{id}` | Remove a watchlist entry |
-| `GET`  | `/api/cameras` | List saved cameras |
-| `POST` | `/api/cameras` | Save a camera — `{ "name", "url", "direction" }` |
-| `POST` | `/api/cameras/test` | Test a stream URL — `{ "url" }` → `{ ok, message, preview }` |
-| `DELETE` | `/api/cameras/{id}` | Remove a saved camera |
+| `POST` | `/api/login` · `/api/logout` · `GET /api/me` | Session auth → returns a token |
+| `POST` | `/api/account/password` | Change username / password |
+| `GET/POST/DELETE` | `/api/tokens` | Manage API access tokens |
+| `GET`  | `/api/status` · `/api/health` | Engine, cameras, stats, liveness |
+| `POST` | `/api/recognize` | Image upload → detected plates + annotated preview |
+| `GET/POST/PATCH/DELETE` | `/api/cameras` | Manage cameras; `PATCH {enabled}` arms always-on |
+| `POST` | `/api/cameras/test` | Test a stream URL → `{ ok, message, preview }` |
+| `POST` | `/api/stream/start` · `/api/stream/stop` · `GET /api/stream/mjpeg?camera=` | Live view |
+| `GET`  | `/api/events?plate=&direction=&list_type=&date_from=&date_to=` | Search the log |
+| `GET`  | `/api/events/export` | Download the filtered log as CSV |
+| `GET/POST/DELETE` | `/api/watchlist` | White / black list |
+| `GET/POST/DELETE` | `/api/learn/samples` · `POST /api/learn/train` · `GET /api/learn/status` · `POST /api/learn/apply` | Learn / train |
+| `GET`  | `/api/system/gpu` | GPU detection |
 | `WS`   | `/ws/events` | Live detection events as JSON |
-
-```bash
-# Recognize an uploaded image
-curl -F "file=@car.jpg" http://localhost:8080/api/recognize
-
-# Start an RTSP camera as an entry lane
-curl -X POST http://localhost:8080/api/stream/start \
-     -H "Content-Type: application/json" \
-     -d '{"source":"rtsp://user:pass@host/stream","direction":"entry"}'
-
-# Add a plate to the blacklist with a name
-curl -X POST http://localhost:8080/api/watchlist \
-     -H "Content-Type: application/json" \
-     -d '{"plate":"12 ب 34567","name":"Stolen vehicle","list_type":"black"}'
-```
 
 ---
 
@@ -177,82 +189,61 @@ file — see [`.env.example`](.env.example)):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PLATRIX_DETECTOR` | `contour` | `contour` or `yolo` |
-| `PLATRIX_OCR` | `cnn` | `cnn` or `none` |
-| `PLATRIX_YOLO_WEIGHTS` | `models/plate_yolo.pt` | YOLO detector weights |
-| `PLATRIX_OCR_WEIGHTS` | `models/ocr_cnn.h5` | CNN OCR weights |
-| `PLATRIX_FRAME_STRIDE` | `1` | Process every Nth frame |
-| `PLATRIX_MAX_FPS` | `30` | Throttle source read rate |
+| `PLATRIX_MODE` | `two-stage` | `two-stage` (detector + reader) or `unified` (experimental single model) |
+| `PLATRIX_DETECTOR` | `auto` | `auto` · `yolo` · `contour` |
+| `PLATRIX_OCR` | `auto` | `auto` · `crnn` · `onnx` · `cnn` · `none` |
+| `PLATRIX_DETECTION_CONFIDENCE` | `0.5` | Ignore weaker (non-plate) detections |
 | `PLATRIX_DEDUPE_SECONDS` | `4` | Suppress repeated logs of the same plate |
-| `PLATRIX_DEFAULT_SOURCE` | *(empty)* | Auto-start this source on boot |
-| `PLATRIX_HOST` / `PLATRIX_PORT` | `0.0.0.0` / `8080` | Server bind address |
+| `PLATRIX_AUTH_ENABLED` | `true` | Require login for the dashboard & API |
+| `PLATRIX_AUTH_USER` / `PLATRIX_AUTH_PASSWORD` | `admin` / `admin` | **Change these** |
+| `PLATRIX_SECRET_KEY` | *(dev default)* | Cookie/token signing key — set a long random value |
+| `PLATRIX_DEFAULT_SOURCE` | *(empty)* | Auto-view a source on boot |
+| `PLATRIX_HOST` / `PLATRIX_PORT` | `0.0.0.0` / `8080` | Bind address |
 
 ---
 
-## 🧠 Training the Persian OCR model
+## 📦 Models
 
-The `onnx` OCR backend needs a model. Train one from a labelled Persian
-character dataset (digit and letter glyph images), then point Platrix at it:
-
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cpu   # training only
-python scripts/train_ocr.py --data /path/to/character-dataset --epochs 10
-# → models/ocr_cnn.onnx  +  models/ocr_cnn.labels.json
-```
-
-The trainer folds the Arabic presentation forms back to base letters (NFKC),
-drops non-plate punctuation, augments each glyph (random scale / shift / rotate)
-so the model tolerates how the segmenter frames characters, and exports to ONNX.
-The label file records the output-neuron order so Platrix maps predictions back
-to the correct characters automatically.
-
-### Get the pre-trained model
-
-The ready-to-use Persian OCR model is published on Hugging Face:
+The trained models live on Hugging Face (not committed to this repo):
 
 **➜ https://huggingface.co/Dibachain/ocr-persian**
 
 ```bash
-pip install huggingface_hub
-# OCR model + the YOLO plate detector (end-to-end reading on real photos)
 huggingface-cli download Dibachain/ocr-persian \
-    plate_yolo.onnx ocr_crnn.onnx ocr_crnn.labels.json --local-dir models/
-platrix serve   # auto-detects the models and uses YOLO + CRNN
+    ocr_crnn.onnx ocr_crnn.labels.json plate_yolo.onnx --local-dir models/
 ```
 
-You can also **train your own** with the command above, or request the model by
-email: **[dibachain@gmail.com](mailto:dibachain@gmail.com)**.
+| File | Role |
+|------|------|
+| `plate_yolo.onnx` | YOLO plate **detector** |
+| `ocr_crnn.onnx` (+ `.labels.json`) | Whole-plate **CRNN reader** (recommended) |
 
-> **Model weights are not committed to this repo** (they live on Hugging Face).
-> Until a model is in place, Platrix runs in detection-only mode: it still
-> localizes plates and logs snapshots + timestamps, and you can label plates by
-> hand in the **Image Detection** tab.
+Until models are in place, Platrix runs in detection-only mode (still logs
+snapshots + timestamps) and you can label plates by hand in the dashboard.
 
-A legacy Keras/TensorFlow trainer is available at `scripts/train_ocr_keras.py`
-for the `cnn` backend.
+### Training
 
-### Training the whole-plate CRNN reader
-
-The recommended reader is trained on realistic full-plate images (rendered with
-the official plate font and heavy augmentation) whose text is encoded in each
-filename, then exported to ONNX:
-
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-python scripts/train_crnn.py --data /path/to/generated_plates --epochs 15
-# → models/ocr_crnn.onnx  +  models/ocr_crnn.labels.json
-```
-
-### Training the plate detector
-
-The YOLO plate detector is trained from a Pascal-VOC plate-detection dataset
-(images + bounding boxes) and exported to ONNX:
+Install the training extras first (CPU build shown):
 
 ```bash
 pip install torch torchvision ultralytics --index-url https://download.pytorch.org/whl/cpu
-python scripts/train_detector.py --voc /path/to/voc-dataset --epochs 30
-# → models/plate_yolo.onnx  (+ .pt)
 ```
+
+```bash
+# Whole-plate CRNN reader — from realistic full-plate images
+python scripts/train_crnn.py --data /path/to/plates --epochs 16
+# → models/ocr_crnn.onnx
+
+# Compose plates from REAL character crops (fixes look-alikes like 4 vs 6)
+python scripts/compose_iranis_plates.py --iranis /path/to/char-dataset --out ds --count 8000
+
+# Plate detector (real photos + Iranian scenes, tighter boxes)
+python scripts/train_detector.py --voc /path/to/voc --epochs 30
+# → models/plate_yolo.onnx
+```
+
+The Learn tab wraps the same training in a friendly, progress-tracked UI, or
+email **[dibachain@gmail.com](mailto:dibachain@gmail.com)** to request the models.
 
 ---
 
@@ -260,17 +251,19 @@ python scripts/train_detector.py --voc /path/to/voc-dataset --epochs 30
 
 ```
 platrix/
-├── config.py          # environment-driven settings
-├── core/              # domain types + recognition pipeline
-├── detection/         # contour + YOLO detectors (pluggable)
-├── ocr/               # segmentation, CNN OCR, Persian plate formatting
-├── sources/           # image / video / webcam / RTSP frame sources
-├── storage/           # SQLite event store + snapshot writer
-├── server/            # FastAPI app, MJPEG streaming, WebSocket
-├── web/               # dashboard (HTML/CSS/JS)
-└── cli.py             # `platrix` command-line entrypoint
-scripts/train_ocr.py   # OCR training utility
-tests/                 # pytest suite
+├── config.py              # environment-driven settings
+├── core/                  # domain types + recognition pipeline
+├── detection/             # YOLO + contour detectors
+├── ocr/                   # CRNN reader, segmentation, Persian plate formatting
+├── preprocessing.py       # image-quality / denoising enhancement layer
+├── sources/               # image / video / webcam / RTSP frame sources
+├── storage/               # SQLite: events, cameras, watchlist, tokens, samples
+├── server/                # FastAPI app, auth, multi-camera manager, GPU detect
+├── unified.py             # experimental single-model reader
+├── web/                   # dashboard (HTML/CSS/JS)
+└── cli.py                 # `platrix` command-line entrypoint
+scripts/                   # training utilities (CRNN, detector, composer, learn job)
+tests/                     # pytest suite
 ```
 
 ---
@@ -279,18 +272,9 @@ tests/                 # pytest suite
 
 ```bash
 pip install -e .[dev]
-ruff check platrix     # lint
-pytest -q              # tests
+ruff check platrix
+pytest -q
 ```
-
----
-
-## 🗺️ Roadmap
-
-- [ ] Pre-trained plate + OCR weights as downloadable releases
-- [ ] Multi-camera fan-out with per-source event streams
-- [ ] Optional plate anonymization / retention policies
-- [ ] Prometheus metrics endpoint
 
 ---
 
