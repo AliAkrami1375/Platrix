@@ -76,6 +76,28 @@ fallbacks; `auto` selects the best available.
 
 ---
 
+## 📊 Performance
+
+Measured on **220 real Iranian surveillance photos** (grayscale gate/road
+cameras — the hard, real-world domain):
+
+<p align="center">
+  <img src="https://huggingface.co/Dibachain/Platrix/resolve/main/assets/benchmark.png" width="80%" />
+</p>
+
+| | Detection rate | Full plate read |
+|---|:---:|:---:|
+| Primary detector | 96.4% | 95.9% |
+| **Primary + fallback** | **98.2%** | **97.7%** |
+
+A lightweight **secondary detector** runs only when the primary finds nothing,
+recovering trucks, night shots and small/dim plates the primary is blind to —
+with no regression on the easy majority. The whole-plate reader hits **~98% on
+real photos**. Full training curves and more charts are on the
+[model card](https://huggingface.co/Dibachain/Platrix).
+
+---
+
 ## 🚀 Quick start
 
 ### Option A — Docker (recommended)
