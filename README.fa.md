@@ -220,6 +220,15 @@ curl -H "Authorization: Bearer pltx_xxx" \
      -F "file=@img-test/sample-01.jpg" http://localhost:8080/api/recognize
 ```
 
+<p align="center">
+  <img src="img-test/sample-01.jpg" width="32%" />
+  <img src="img-test/sample-02.jpg" width="32%" />
+  <img src="img-test/sample-03.jpg" width="32%" />
+  <img src="img-test/sample-05.jpg" width="32%" />
+  <img src="img-test/sample-06.jpg" width="32%" />
+  <img src="img-test/sample-08.jpg" width="32%" />
+</p>
+
 ---
 
 ## 📄 مجوز

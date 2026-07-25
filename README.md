@@ -245,6 +245,15 @@ curl -H "Authorization: Bearer pltx_xxx" \
 
 Or just drop one into the **Image Detection** tab.
 
+<p align="center">
+  <img src="img-test/sample-01.jpg" width="32%" />
+  <img src="img-test/sample-02.jpg" width="32%" />
+  <img src="img-test/sample-03.jpg" width="32%" />
+  <img src="img-test/sample-05.jpg" width="32%" />
+  <img src="img-test/sample-06.jpg" width="32%" />
+  <img src="img-test/sample-08.jpg" width="32%" />
+</p>
+
 ### Training
 
 Install the training extras first (CPU build shown):
